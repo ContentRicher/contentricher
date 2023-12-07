@@ -4,7 +4,8 @@ ContentRicher - Enriching editorial content to address different knowledge level
 
 ## Overview
 
-ContentRicher enables media professionals, journalists and editors, to reach a wider audience by adding additional information to articles for different target groups with different levels of knowledge
+ContentRicher enables media professionals, journalists and editors, to reach a wider audience by adding additional information to articles for different target groups with different levels of knowledge.
+
 It is a web- and AI-based system that detects relevant parts in given texts that would benefit from additional explanation. It then retrieves additional information, identifies the most relevant parts and enriches the text seamlessly.
 
 ## Features
