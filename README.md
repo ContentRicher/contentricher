@@ -1,5 +1,5 @@
 # contentricher
-ContentRicher - Enrichting editorial content to address different knowledge levels
+ContentRicher - Enriching editorial content to address different knowledge levels
 
 ## 🙏 Supported by
 
