@@ -1,6 +1,15 @@
-# contentricher
+# ContentRicher
+
 ContentRicher - Enriching editorial content to address different knowledge levels
 
+## Overview
+
+ContentRicher enables media professionals, journalists and editors, to reach a wider audience by adding additional information to articles for different target groups with different levels of knowledge
+It is a web- and AI-based system that detects relevant parts in given texts that would benefit from additional explanation. It then retrieves additional information, identifies the most relevant parts and enriches the text seamlessly.
+
+## Features
+
+  
 ## 📘 License
 
 ContentRicher is licensed under the MIT license. For more information check the LICENSE file for details.
