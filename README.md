@@ -1,6 +1,10 @@
 # contentricher
 ContentRicher - Enriching editorial content to address different knowledge levels
 
+## 📘 License
+
+ContentRicher is licensed under the MIT license. For more information check the LICENSE file for details.
+
 ## 🙏 Supported by
 
 - Media Tech Lab [`media-tech-lab`](https://github.com/media-tech-lab)
