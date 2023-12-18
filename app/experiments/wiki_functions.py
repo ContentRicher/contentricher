@@ -1,0 +1,2 @@
+def get_wikipage_content():
+    return """Heidi Klum (* 1. Juni 1973 in Bergisch Gladbach, bürgerlich von 2009 bis 2012 Heidi Samuel, seit 2019 Heidi Kaulitz[1][2]) ist ein deutsches Model. Seit 2008 besitzt sie auch die US-amerikanische Staatsbürgerschaft. Sie arbeitet als Jurorin, Moderatorin bzw. Produzentin der Castingshows Germany’s Next Topmodel, Queen of Drags und America’s Got Talent. Bis 2018 war sie bei Project Runway Mit-Produzentin, Moderatorin und Jury-Vorsitzende."""
