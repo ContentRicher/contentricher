@@ -1,9 +1,16 @@
 import streamlit as st
 import wiki_functions as wf
 
+import langchain_core
+#from langchain.llms import OpenAI
+from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
+#from langchain.prompts import PromptTemplate
+from langchain_core.pydantic_v1 import BaseModel, Field, validator
+from typing import Literal, List
+
+
 # Text input for article with default text
-default_text = """Hier kann ein Artikel eingetragen werden...:
-Heidi Klum
+default_text = """Heidi Klum
 Vorgezogenes Weihnachtsfest mit ihrer Familie
 
 Heidi Klum hat mit ihrem Liebsten Tom Kaulitz und der Familie ein vorgezogenes Weihnachtsfest gefeiert. Auf Instagram gewährte das Model seinen Fans einen Einblick.
@@ -14,25 +21,34 @@ Auf ihrem Instagram-Profil postete die vierfache Mama einen Clip vom gemeinsamen
 """
 
 
-default_wiki = """Informationen von Wikipedia...:
-Heidi Klum
-
-Heidi Klum (* 1. Juni 1973 in Bergisch Gladbach, bürgerlich von 2009 bis 2012 Heidi Samuel, seit 2019 Heidi Kaulitz[1][2]) ist ein deutsches Model. Seit 2008 besitzt sie auch die US-amerikanische Staatsbürgerschaft. Sie arbeitet als Jurorin, Moderatorin bzw. Produzentin der Castingshows Germany’s Next Topmodel, Queen of Drags und America’s Got Talent. Bis 2018 war sie bei Project Runway Mit-Produzentin, Moderatorin und Jury-Vorsitzende.
-Leben
-Klum wurde 1973 in Bergisch Gladbach geboren und wuchs dort auch auf. Sie besuchte die Integrierte Gesamtschule Paffrath bis zum Abitur. Ihr Vater Günther Klum ist gelernter Chemiefacharbeiter und ehemaliger Produktionsleiter beim Parfümhersteller 4711, ihre Mutter Erna Klum ist ausgebildete Friseurin.[1][3] Aus einer früheren Beziehung ihrer Mutter stammt ein 1964 geborener Halbbruder.[4]
-
-Entdeckung und Karriere
-Klums Karriere begann 1992 mit der Teilnahme am Wettbewerb Model ’92, der in Zusammenarbeit mit der Frauenzeitschrift Petra, der New Yorker Modelagentur Metropolitan Models[5][6][7] und dem Koordinator Christian Seidel[8] in der von Holm Dressler und Thomas Gottschalk produzierten RTL-Show Gottschalk Late Night stattfand. Bei diesem Wettbewerb setzte sich die damals 18-jährige Schülerin gegen 25.000[8] Konkurrentinnen durch und gewann einen mit 300.000 US-Dollar dotierten dreijährigen Vertrag als Fotomodell.[9] Nach dem bestandenen Abitur verzichtete sie auf einen Ausbildungsplatz als Modedesignerin in Düsseldorf, um als Model zu arbeiten.[10] Weil damals in Europa sehr dünne Models gefragt waren, zog sie in die Vereinigten Staaten, wo sie seit 1993 lebt.[11]
-
-1997 gelang ihr hier der Durchbruch, als sie von Victoria’s Secret engagiert wurde und 1998 ein Titelfoto auf der Bademodenausgabe der US-amerikanischen Zeitschrift Sports Illustrated mit 55 Millionen Lesern folgte. Sie erschien auf den Titelseiten von Zeitschriften wie Vogue und Elle und wurde ein international gefragtes Model und Werbegesicht.[12] Klums Vater ist auch ihr Manager. Er gründete in Bergisch Gladbach die Heidi Klum GmbH & Co. KG und betreibt dort auch deren Büro.[3]
-"""
 
 if "user_input" not in st.session_state:
     st.session_state.user_input = default_text
 if "wiki_input" not in st.session_state:
-    st.session_state.wiki_input = ''#None#' '#default_wiki
+    st.session_state.wiki_input = ''
 if "find_person_clicked" not in st.session_state:
     st.session_state.find_person_clicked = None
+
+if "clicked" not in st.session_state:
+    st.session_state.clicked = False
+
+if "found_ents" not in st.session_state:
+    st.session_state.found_ents = False
+
+if "relevant_parts_to_show" not in st.session_state:
+    st.session_state.relevant_parts_to_show = None
+
+if "parsed_ents" not in st.session_state:
+    st.session_state.parsed_ents = None
+
+
+def set_clicked():
+    st.session_state.clicked = True
+
+def set_relevant_parts_to_show(context, wiki_title):
+    text = wf.get_page_content(wiki_title)
+    st.set_relevant_parts_to_show = st.session_state.relevant_parts_to_show = wf.get_relevant_parts(context, text[:8000], wiki_title)
+    st.session_state.clicked = True
 
 # Function to create dummy images
 def create_dummy_image():
@@ -63,92 +79,111 @@ with middle_column:
     if st.button('Finde Personen'):
         #st.success('Personen hervorgehoben.')
         st.session_state.find_person_clicked = True
+        st.session_state.user_input = article_text ##TODO check if it always gets the current text
+        st.session_state.parsed_ents = wf.get_all_wiki_urls(st.session_state.user_input)
+
 
     st.markdown("""___""")
 
     if st.session_state.find_person_clicked == True:
+
+        parsed_ents = st.session_state.parsed_ents
+
         # Rows for identified persons and related articles
-        for i in range(3):
+        col1, col2, col3 = st.columns([1, 2, 1])
 
-            if i == 0:
-                person_name = f"Heidi Klum"
-                #st.write(person_name)
-                col1, col2, col3 = st.columns([1, 2, 1])
+        context = st.session_state.user_input
 
-                # Left column for face image
-                with col1:
-                    st.write(person_name)
-                    st.image("./img/Heidi_Klum_by_Glenn_Francis.jpg", width=100, caption=person_name)
+        ##not sure if this is helpful or obsolete...
+        people = dict()
+        people = st.session_state.parsed_ents.entities
 
-                # Right column for articles related to the person
-                with col2:
-                    #st.write(f"Artikel zu {person_name}")
-                    st.write(f"Artikel zu {person_name}")
-                    #	    Relevant Articles in Database:
-                    st.markdown("""
-                - [Wikipedia](https://de.wikipedia.org/wiki/Heidi_Klum) - Heidi Klum
-                - [Instagram](https://www.instagram.com/heidiklum/) - @heidiklum
-                """)
-                    
-                with col3:
-                    st.write(f"Show")
-                    if st.button(f"Show summary"):
-                        wikicontent = wf.get_wikipage_content()
-                        st.session_state.wiki_input = wikicontent#"""abcdefg"""
+        i = 0
+        for i in range(len(people)):
 
-            else:
-                person_name = f"Person {i+1}"
-                #st.write(person_name)
-                col1, col2 = st.columns([1, 2])
+            ent = people[i]
 
-                # Left column for face image
-                with col1:
-                    st.write(person_name)
+            person_name = ent.name
+
+            col1, col2, col3 = st.columns([1, 2, 1])
+
+            # Left column for face image
+            with col1:                        
+                st.write(person_name)
+                if person_name == 'Heidi Klum': ##tmp only, to replace with retrieved image
+                    st.image("../img/Heidi_Klum_by_Glenn_Francis.jpg", width=100, caption=person_name)
+                else:
                     st.image(create_dummy_image(), width=100, caption=person_name)
 
-                # Right column for articles related to the person
-                with col2:
-                    #st.write(f"Artikel zu {person_name}")
-                    st.write(f"Artikel zu {person_name}")
-                    #	    Relevant Articles in Database:
-                    st.markdown("""
-                - [Article Title 1](#) - 24.10.2023
-                - [Article Title 2](#) - 01.09.2023
-                - [Article Title 3](#) - 29.09.2023
+            # Right column for articles related to the person
+            with col2:
+
+                st.write(f"Informationen zu {person_name}")
+                # Relevant Information:
+
+                ##for now, taking the first entry, TODO: possibly improve wikipedia disambiguation in backend function
+                try:
+                    wiki_url = ent.urls[0].url
+                    wiki_url_title = ent.urls[0].title
+                    wiki_line = f"""- [Wikipedia]({wiki_url}) - {wiki_url_title}"""
+                except: 
+                    wiki_url = ''
+                    wiki_url_title = ''
+                    wiki_line = f"""- Kein Eintrag auf Wikipedia gefunden."""
+
+
+                insta_line = f""""""#- Instagram Eintrag - TODO"""
+                    
+
+                st.markdown(f"""
+                """+ wiki_line +"""
+                """+ insta_line + """
                 """)
-                
+
+            with col3:
+                st.write(f"Aktion")
+                st.button(f"Relevante Auszüge", on_click=set_relevant_parts_to_show, args=(context, wiki_url_title), key = "button"+str(i))
+
+
+            i += 1   
+
+        st.session_state.found_ents = True
+
         # Button below the text area
         #if st.button('Artikel speichern'):
         #    st.success('Artikel gespeichert.')
 
 
+
 # Rightmost column with Wikipedia information and buttons
 with right_column:
-    if not st.session_state.wiki_input == '':#None:
+    ##todo: It's not just about wiki_input
 
-        #st.title("_")
-        #st.markdown("")
-        #st.markdown("")
+    if st.session_state.found_ents == True:
 
         original_title = '<p style="font-family:Courier; color:White; font-size: 45px;">_</p>'
         st.markdown(original_title, unsafe_allow_html=True)
-        #st.subheader("Wikipedia Informationen")
 
-        text_area_input = st.text_area("Wikipedia Artikel", height=600, placeholder = default_wiki, value = st.session_state.wiki_input)#"Text not yet retrieved")
-        st.session_state.text_area_input = text_area_input
+        i = 0
+        if st.session_state.clicked:# and not st.session_state.found_ents:
 
 
-        # Two buttons, one active and one inactive
-        if st.button('Quelle anzeigen'):
-            st.info('Quelle: Wikipedia')
-        rcol1, rcolmid, rcol2 = st.columns([1, 1.4, 1])
-        with rcol1:
-            st.button('Rückgängig', disabled=True)
-        with rcol2:
-            if st.button('Integrieren', disabled=False):
-                st.session_state.user_input = "ABC"
-                st.experimental_rerun() ##Seite neu laden, nicht erst unten anzeigen.
+            text_to_show = wf.concatenate_relevant_parts_to_show(st.session_state.relevant_parts_to_show)
+            text_area_input = st.text_area("Wikipedia Artikel", height=int(150*len(text_to_show)/(38*5)), placeholder = "", value = text_to_show)#st.session_state.wiki_input)
+            st.session_state.text_area_input = text_area_input
+
+            # Two buttons, one active and one inactive
+            if st.button('Quelle anzeigen'):
+                st.info('Quelle: Wikipedia')
+            rcol1, rcolmid, rcol2 = st.columns([1, 1.4, 1])
+            with rcol1:
+                st.button('Rückgängig', disabled=True)
+            with rcol2:
+                if st.button('Integrieren', disabled=False):
+                    st.session_state.user_input = "ABC"
+                    st.experimental_rerun() ##Seite neu laden, nicht erst unten anzeigen.
+
+
             
 print(st.session_state)
 
-# Save this as app.py and run it with `streamlit run app.py` in your terminal.
