@@ -8,6 +8,8 @@ from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
 from langchain_core.pydantic_v1 import BaseModel, Field, validator
 from typing import Literal, List
 
+import os
+
 
 # Text input for article with default text
 default_text = """Heidi Klum
@@ -47,7 +49,7 @@ def set_clicked():
 
 def set_relevant_parts_to_show(context, wiki_title):
     text = wf.get_page_content(wiki_title)
-    st.set_relevant_parts_to_show = st.session_state.relevant_parts_to_show = wf.get_relevant_parts(context, text[:8000], wiki_title)
+    st.session_state.relevant_parts_to_show = wf.translate_content(wf.get_relevant_parts(context, text[:8000], wiki_title), 'en', 'de')
     st.session_state.clicked = True
 
 # Function to create dummy images
@@ -67,6 +69,9 @@ if st.sidebar.button('Suche starten'):
 
 # Main area layout with two columns
 left_column, middle_column, right_column = st.columns([1, 6, 3])
+
+wiki_images = dict()
+my_folder = "../img/"#'wiki_images'#wf.my_folderwf.my_folder
 
 # Middle column for the article input and identified persons
 with middle_column:
@@ -107,13 +112,6 @@ with middle_column:
 
             col1, col2, col3 = st.columns([1, 2, 1])
 
-            # Left column for face image
-            with col1:                        
-                st.write(person_name)
-                if person_name == 'Heidi Klum': ##tmp only, to replace with retrieved image
-                    st.image("../img/Heidi_Klum_by_Glenn_Francis.jpg", width=100, caption=person_name)
-                else:
-                    st.image(create_dummy_image(), width=100, caption=person_name)
 
             # Right column for articles related to the person
             with col2:
@@ -126,10 +124,27 @@ with middle_column:
                     wiki_url = ent.urls[0].url
                     wiki_url_title = ent.urls[0].title
                     wiki_line = f"""- [Wikipedia]({wiki_url}) - {wiki_url_title}"""
+
+                    the_page = wiki_url_title
+                    # get JSON data and extract image URL
+                    the_url = wf.get_image_url(the_page)
+                    # if the URL is not None ...
+                    if (the_url):
+                        # download that image
+                        wf.download_image(the_url, the_page)
+                        
+                        input_image_path = my_folder+the_page+'.jpg'#os.path.join(my_folder, my_folder+the_page+'.jpg')#os.path.basename(the_page + '.jpg'))
+                        output_image_path = my_folder+the_page+'_sm.jpg'#os.path.join(my_folder, my_folder+the_page+'.jpg'))#os.path.basename(the_page)+"_sm.jpg")
+
+                        wf.shrink_image(input_image_path, output_image_path)
+                        wiki_images[i] = output_image_path
+                    else:
+                        print("No image file for " + the_page)
                 except: 
                     wiki_url = ''
                     wiki_url_title = ''
                     wiki_line = f"""- Kein Eintrag auf Wikipedia gefunden."""
+
 
 
                 insta_line = f""""""#- Instagram Eintrag - TODO"""
@@ -140,12 +155,30 @@ with middle_column:
                 """+ insta_line + """
                 """)
 
+            # Left column for face image
+            with col1:                        
+                st.write(person_name)
+                if person_name == 'Heidi Klums': ##tmp only, to replace with retrieved image
+                    st.image("../img/Heidi_Klum_by_Glenn_Francis.jpg", width=100, caption=person_name)
+                else:
+                    #st.image(create_dummy_image(), width=100, caption=person_name)
+                    try: 
+                        st.image(wiki_images[i], width = 100, caption=person_name)
+                    except: 
+                        st.image(create_dummy_image(), width=100, caption=person_name)
+
             with col3:
                 st.write(f"Aktion")
                 st.button(f"Relevante Auszüge", on_click=set_relevant_parts_to_show, args=(context, wiki_url_title), key = "button"+str(i))
 
 
             i += 1   
+
+
+        for file in os.listdir(my_folder): 
+            if file.endswith('.jpg') and not file.endswith('_sm.jpg'):
+                file = os.path.join(my_folder, file)
+                os.remove(file)
 
         st.session_state.found_ents = True
 
@@ -168,9 +201,20 @@ with right_column:
         if st.session_state.clicked:# and not st.session_state.found_ents:
 
 
-            text_to_show = wf.concatenate_relevant_parts_to_show(st.session_state.relevant_parts_to_show)
-            text_area_input = st.text_area("Wikipedia Artikel", height=int(150*len(text_to_show)/(38*5)), placeholder = "", value = text_to_show)#st.session_state.wiki_input)
-            st.session_state.text_area_input = text_area_input
+            #text_to_show = wf.concatenate_relevant_parts_to_show(st.session_state.relevant_parts_to_show)
+            #text_area_input = st.text_area("Wikipedia Artikel", height=int(150*len(text_to_show)/(38*5)), placeholder = "", value = text_to_show)#st.session_state.wiki_input)
+            #st.session_state.text_area_input = text_area_input
+
+            for rp in st.session_state.relevant_parts_to_show.relevantparts:
+
+                col1b, col2b = st.columns([0.5, 10])
+                with col1b:
+                    st.checkbox('', key = "checkbox"+str(i))
+                with col2b:
+                    ##adapting to usually 42 characters * 6 rows fitting a height 150 text_area
+                    text_area_input = st.text_area("Wikipedia Artikel", height=int(150*len(rp.fact)/(38*5)), placeholder = "", value = rp.fact, key = "text_area"+str(i))#"Text not yet retrieved")
+                    st.session_state.text_area_input = text_area_input
+                i += 1
 
             # Two buttons, one active and one inactive
             if st.button('Quelle anzeigen'):

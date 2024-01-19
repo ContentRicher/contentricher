@@ -15,6 +15,23 @@ from typing import Literal, List
 import wikipedia
 import random
 
+import requests, os
+from PIL import Image
+
+# set the folder name where images will be stored
+my_folder = "../img/"#'wiki_images'
+
+# create the folder in the current working directory
+# in which to store the downloaded images
+os.makedirs(my_folder, exist_ok=True)
+
+# front part of each Wikipedia URL
+base_url = 'https://en.wikipedia.org/wiki/'
+
+# Wikipedia API query string to get the main image on a page
+# (partial URL will be added to the end)
+query = 'http://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&titles='
+
 
 load_dotenv()
 
@@ -252,6 +269,61 @@ def get_relevant_parts(context, text, wiki_title):
     return parsed
 
 
+def translate_content(parsed_input, lang_in, lang_out):
+    if lang_in == "en": 
+        lang_in = "English"
+    elif lang_in == "fr": 
+        lang_in = "French"
+
+    if lang_out == "de":
+        lang_out = "German"
+
+    json_template = """{
+        "relevant_parts": [
+            {
+            "rank": 1,
+            "fact": "Sam Altman, CEO of OpenAI, was unexpectedly fired on a Friday. Since then, OpenAI and its main investor, Microsoft, experienced turmoil. Two successors, Mira Murati and Emmett Shear, temporarily took over his job. It's now confirmed that Sam Altman has returned to his position.",
+            "reasoning": "Provides context about the recent events regarding his role at OpenAI."
+            },
+            {
+            "rank": 2,
+            "fact": "On November 17, 2023, OpenAI's board decided to remove Sam Altman as CEO. In response, a significant number of employees reacted, resulting in an agreement in principle for Altman's return as CEO.",
+            "reasoning": "Details the reason behind his brief departure and the process leading to his reinstatement."
+            },
+            {
+            "rank": 3,
+            "fact": "Sam Altman has been involved in various ventures outside of OpenAI, including being the CEO of Reddit for a short period, supporting COVID-19 research, and investing in startups and nuclear energy companies. He has also been engaged in political activities and philanthropy.",
+            "reasoning": "Shows Altman's diverse interests and influence beyond his role at OpenAI."
+            }
+        ]
+        }"""
+
+    system_intel = f"""You are an expert translator from {lang_in} to {lang_out}."""
+    prompt = f"""Given the following json object, translate any elements within the 'fact' part that are not in {lang_out} into {lang_out}, except for short direct quotes. 
+    For longer quotes, do translate them, but also put the original quote in original language.
+    Pay attention to use correct German formulations and grammar, as you would find them in a news article.
+
+    json object: 
+    {parsed_input}
+
+    Return the altered json object in JSON, use the following format (not content):
+    JSON:
+    {json_template}
+    """
+
+    res = ask_GPT(system_intel, prompt) ##TODO replace by langchain generic call (llm replaceable)
+    #print(result) 
+
+    ##Parse results
+    try: 
+        parser = PydanticOutputParser(pydantic_object=RelevantParts) 
+        parsed = parser.invoke(res)
+    except:
+        fixing_parser = OutputFixingParser.from_llm(parser=parser, llm=model)
+        parsed = fixing_parser.invoke(res)
+
+    return parsed
+
 
 def concatenate_relevant_parts_to_show(relevant_parts_to_show):
     string_to_show = ""
@@ -265,6 +337,68 @@ def concatenate_relevant_parts_to_show(relevant_parts_to_show):
         else:
             string_to_show += "\n\n" + rp.fact
     return string_to_show
+
+# get JSON data w/ API and extract image URL
+def get_image_url(partial_url):
+    try:
+        api_res = requests.get(query + partial_url).json()
+        first_part = api_res['query']['pages']
+        # this is a way around not knowing the article id number
+        for key, value in first_part.items():
+            if (value['original']['source']):
+                data = value['original']['source']
+                return data
+    except Exception as exc:
+        print(exc)
+        print("Partial URL: " + partial_url)
+        data = None
+    return data
+
+# download one image with URL obtained from API
+def download_image(the_url, the_page):
+    headers = {'User-Agent': 'CoolBot/0.0 (https://example.org/coolbot/; coolbot@example.org)'}
+    res = requests.get(the_url, headers=headers)
+    res.raise_for_status()
+
+    # get original file extension for image
+    # by splitting on . and getting the final segment
+    file_ext = '.' + the_url.split('.')[-1].lower()
+
+    # save the image to folder - binary file - with desired filename
+    image_file = open(os.path.join(my_folder, os.path.basename(the_page + file_ext)), 'wb')
+
+    # download the image file 
+    # HT to Automate the Boring Stuff with Python, chapter 12 
+    for chunk in res.iter_content(100000):
+        image_file.write(chunk)
+    image_file.close()
+
+
+def shrink_image(input_path, output_path, max_dimension=512):
+    # Open the image
+    original_image = Image.open(input_path)
+ 
+    # Get original width and height
+    original_width, original_height = original_image.size
+ 
+    # Calculate the new dimensions while maintaining the aspect ratio
+    if original_width > original_height:
+        new_width = max_dimension
+        new_height = int((original_height / original_width) * max_dimension)
+    else:
+        new_width = int((original_width / original_height) * max_dimension)
+        new_height = max_dimension
+ 
+    # Resize the image
+    resized_image = original_image.resize((new_width, new_height), Image.LANCZOS)
+ 
+    # Save the resized image
+    print('output path:')
+    print(output_path)
+    resized_image.save(output_path)
+
+    return resized_image
+
 
 if __name__ == "__main__":
     pass
