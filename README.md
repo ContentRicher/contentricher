@@ -10,6 +10,11 @@ It is a web- and AI-based system that detects relevant parts in given texts that
 
 ## Features
 
+## Running it
+
+To run the app, in a .env file in the app/experiments folder, put API_KEY = "[YOUR API KEY HERE]"
+Then run the app from the experiments folder with: 
+streamlit run frontend_experiments.py
   
 ## 📘 License
 
