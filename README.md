@@ -9,6 +9,9 @@ ContentRicher enables media professionals, journalists and editors, to reach a w
 It is a web- and AI-based system that detects relevant parts in given texts that would benefit from additional explanation. It then retrieves additional information, identifies the most relevant parts and enriches the text seamlessly.
 
 ## Features
+- AI-based Information Retrieval: Based on state-of-the-art Large Language Models (choose between GPT-3.5 and Mistral) and Multimodal Models ContentRicher identifies persons in the text and retrieves relevant facts about them from Wikipedia and Instagram (from both text and images). 
+- Human-AI collaboration: While the presented facts are already relevant to journalists and editors in the writing process, we also offer automatic integration of the facts: The relevant facts are proposed to the user, who can then select which facts they want to automatically integrate into the text.
+- Userfriendly Interface: Based on Streamlit, it offers a browser-based interface, with intuitive controls and display of the results.
 
 ## Running it
 
