@@ -18,6 +18,10 @@ import random
 import requests, os
 from PIL import Image
 
+##for Mistral:
+from mistralai.client import MistralClient
+from mistralai.models.chat_completion import ChatMessage
+
 # set the folder name where images will be stored
 my_folder = "../img/"#'wiki_images'
 
@@ -36,8 +40,15 @@ query = 'http://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=j
 load_dotenv()
 
 API_KEY=os.getenv("API_KEY")
-
 client = OpenAI(api_key = API_KEY)
+
+MISTRAL_API_KEY=os.getenv("MISTRAL_API_KEY")
+mistral_model = "mistral-small"
+mistral_temperature = 0.15
+mistral_client = MistralClient(api_key=MISTRAL_API_KEY)
+
+chosen_model = 'GPT-3.5'#'Mistral Small'
+
 
 #from langchain.llms import OpenAI
 from langchain_community.chat_models import ChatOpenAI
@@ -71,15 +82,44 @@ class RelevantPart(BaseModel):
 class RelevantParts(BaseModel):
     relevantparts: List[RelevantPart]  
 
+class RankedEntry(BaseModel):
+    rank: int = Field(description = "This is the rank of probability among all URL suggestions.")
+    title: str = Field(description = "This is the title of the Wikipedia page")
+    url: str = Field(description = "This is the URL of the suggested Wikipedia page")
+    HTML_line: str = Field(description = "The actual HTML line stated in the html that links to the url")
 
-def ask_GPT(system_intel, prompt): 
+class RankedWikiEntries(BaseModel):
+    query: str = Field(description = "This is the entity that is to be disambiguated.")
+    rankedLinks: List[RankedEntry] 
+
+
+def ask_GPT(system_intel, prompt, chosen_model='GPT-3.5'): 
+    if chosen_model == 'GPT-3.5':
+        return ask_openai(system_intel, prompt)
+    else: ##model is Mistral
+        return ask_mistral(system_intel, prompt)
+
+def ask_openai(system_intel, prompt):
     result = client.chat.completions.create(model="gpt-4-1106-preview",#"gpt-3.5-turbo-1106",#"gpt-3.5-turbo",
-                                 messages = [{"role": "system", "content": system_intel},
-                                           {"role": "user", "content": prompt}],
-                                           stream=False
+                                messages = [{"role": "system", "content": system_intel},
+                                        {"role": "user", "content": prompt}],
+                                        stream=False
             )
     #display(Markdown(result['choices'][0]['message']['content']))
     return result.choices[0].message.content
+    
+def ask_mistral(system_intel, prompt): 
+    messages = [
+        ChatMessage(role="system", content=system_intel),
+        ChatMessage(role="user", content=prompt)
+    ]
+    ## No streaming yet
+    chat_response = mistral_client.chat(
+        model=mistral_model,
+        messages=messages,
+        temperature = mistral_temperature
+    )
+    return chat_response.choices[0].message.content
 
 
 def get_wiki_urls(entity, context):
@@ -113,7 +153,6 @@ def get_wiki_urls(entity, context):
     {json_template}"""
 
     res = ask_GPT(system_intel, prompt) ##TODO replace by langchain generic call (llm replaceable)
-    #print(res)
 
     ##Parse results
     try: 
@@ -172,7 +211,6 @@ def get_all_wiki_urls(context):
     {json_template}"""
 
     res = ask_GPT(system_intel, prompt) ##TODO replace by langchain generic call (llm replaceable)
-    #print(res)
 
     ##Parse results
     try: 
@@ -186,16 +224,25 @@ def get_all_wiki_urls(context):
 
 
 ##Catching disambiguation error, can be improved
-def get_page_content(title):
+def get_page_content(context, title):
     try: 
         p = wikipedia.page(title, auto_suggest=False, redirect=True, preload=False)
-    except wikipedia.DisambiguationError as e:
-        s = random.choice(e.options)
+    except wikipedia.DisambiguationError as e: 
+        response = requests.get(
+        'https://en.wikipedia.org/w/api.php',
+            params={
+                'action': 'parse',
+                'page': title,#'Bla Bla Bla',
+                'format': 'json',
+            }
+        ).json()
+        best_entries = get_best_entry(context, response, title)
+        s = best_entries.rankedLinks[0].title
+        ##before:
+        #s = random.choice(e.options)
         p = wikipedia.page(s)
     #print(p.content)
     return p.content
-
-
 
 
 def get_relevant_parts(context, text, wiki_title):
@@ -253,10 +300,8 @@ def get_relevant_parts(context, text, wiki_title):
     """
     ##later add to prompt:
     #    and that is relevant for the target group {target_group}.
-    #print(system_intel)
-    #print(prompt)
+
     res = ask_GPT(system_intel, prompt) ##TODO replace by langchain generic call (llm replaceable)
-    #print(res)
 
     ##Parse results
     try: 
@@ -283,17 +328,14 @@ def translate_content(parsed_input, lang_in, lang_out):
             {
             "rank": 1,
             "fact": "Sam Altman, CEO of OpenAI, was unexpectedly fired on a Friday. Since then, OpenAI and its main investor, Microsoft, experienced turmoil. Two successors, Mira Murati and Emmett Shear, temporarily took over his job. It's now confirmed that Sam Altman has returned to his position.",
-            "reasoning": "Provides context about the recent events regarding his role at OpenAI."
             },
             {
             "rank": 2,
             "fact": "On November 17, 2023, OpenAI's board decided to remove Sam Altman as CEO. In response, a significant number of employees reacted, resulting in an agreement in principle for Altman's return as CEO.",
-            "reasoning": "Details the reason behind his brief departure and the process leading to his reinstatement."
             },
             {
             "rank": 3,
             "fact": "Sam Altman has been involved in various ventures outside of OpenAI, including being the CEO of Reddit for a short period, supporting COVID-19 research, and investing in startups and nuclear energy companies. He has also been engaged in political activities and philanthropy.",
-            "reasoning": "Shows Altman's diverse interests and influence beyond his role at OpenAI."
             }
         ]
         }"""
@@ -338,7 +380,7 @@ def concatenate_relevant_parts_to_show(relevant_parts_to_show):
             string_to_show += "\n\n" + rp.fact
     return string_to_show
 
-# get JSON data w/ API and extract image URL
+## get JSON data w/ API and extract image URL
 def get_image_url(partial_url):
     try:
         api_res = requests.get(query + partial_url).json()
@@ -354,17 +396,17 @@ def get_image_url(partial_url):
         data = None
     return data
 
-# download one image with URL obtained from API
+## download one image with URL obtained from API
 def download_image(the_url, the_page):
     headers = {'User-Agent': 'CoolBot/0.0 (https://example.org/coolbot/; coolbot@example.org)'}
     res = requests.get(the_url, headers=headers)
     res.raise_for_status()
 
-    # get original file extension for image
-    # by splitting on . and getting the final segment
+    ## get original file extension for image
+    ## by splitting on . and getting the final segment
     file_ext = '.' + the_url.split('.')[-1].lower()
 
-    # save the image to folder - binary file - with desired filename
+    ## save the image to folder - binary file - with desired filename
     image_file = open(os.path.join(my_folder, os.path.basename(the_page + file_ext)), 'wb')
 
     # download the image file 
@@ -375,13 +417,13 @@ def download_image(the_url, the_page):
 
 
 def shrink_image(input_path, output_path, max_dimension=512):
-    # Open the image
+    ## Open the image
     original_image = Image.open(input_path)
  
-    # Get original width and height
+    ## Get original width and height
     original_width, original_height = original_image.size
  
-    # Calculate the new dimensions while maintaining the aspect ratio
+    ## Calculate the new dimensions while maintaining the aspect ratio
     if original_width > original_height:
         new_width = max_dimension
         new_height = int((original_height / original_width) * max_dimension)
@@ -389,15 +431,74 @@ def shrink_image(input_path, output_path, max_dimension=512):
         new_width = int((original_width / original_height) * max_dimension)
         new_height = max_dimension
  
-    # Resize the image
+    ## Resize the image
     resized_image = original_image.resize((new_width, new_height), Image.LANCZOS)
  
-    # Save the resized image
-    print('output path:')
-    print(output_path)
+    ## Save the resized image
     resized_image.save(output_path)
 
     return resized_image
+
+
+def get_best_entry(context, html, title):
+    json_template = """
+    {
+    "query": "Sustainable gardening",
+    "rankedLinks": [
+        {
+        "rank": 1,
+        "title": "Sustainable Gardening Techniques",
+        "url": "https://en.wikipedia.org/wiki/sustainable-techniques",
+        "HTML line": "Sustainable Gardening Techniques, comprehensive gardening tips"
+        },
+        {
+        "rank": 2,
+        "title": "Sustainable Gardening 101",
+        "url": "https://www.ecogarden.com/beginners-guide",
+        "HTML line": "Sustainable Gardening 101: Getting Started, guide for beginners"
+        },
+        {
+        "rank": 3,
+        "title": "The Environmental Impact of Gardening",
+        "url": "https://en.wikipedia.org/wiki/environmental-impact",
+        "HTML line": "The Environmental Impact of Gardening, environmental insights"
+        },
+        {
+        "rank": 4,
+        "title": "Innovative Gardening Products",
+        "url": "https://www.moderngardeningtools.com/innovative-products",
+        "HTML line": "Innovative Gardening Products, sustainable product recommendations"
+        }
+    ]
+    }"""
+
+    system_intel = f"""You are an expert on {title} and HTML."""
+    prompt = f"""Interpret the following html and then return only the links that are most appropriate to represent the real link page
+    for {title} given the context below, in order of relevance, in a numbered list.
+
+    HTML:
+    {html}
+
+    Context: 
+    {context}
+
+    Return your answer as plain JSON, following the following format, return the Json only:
+    {json_template}
+
+    JSON:
+    """
+
+    res = ask_GPT(system_intel, prompt)
+
+    ##Parse results
+    try: 
+        parser = PydanticOutputParser(pydantic_object=RankedWikiEntries) 
+        parsed = parser.invoke(res)
+    except:
+        fixing_parser = OutputFixingParser.from_llm(parser=parser, llm=model)
+        parsed = fixing_parser.invoke(res)
+
+    return parsed
 
 
 if __name__ == "__main__":
