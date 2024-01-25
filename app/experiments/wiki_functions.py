@@ -96,8 +96,10 @@ class RankedWikiEntries(BaseModel):
 def ask_GPT(system_intel, prompt, chosen_model='GPT-3.5'): 
     if chosen_model == 'GPT-3.5':
         return ask_openai(system_intel, prompt)
-    else: ##model is Mistral
+    elif chosen_model == 'Mistrall Small': ##model is Mistral
         return ask_mistral(system_intel, prompt)
+    else: 
+        return ''
 
 def ask_openai(system_intel, prompt):
     result = client.chat.completions.create(model="gpt-4-1106-preview",#"gpt-3.5-turbo-1106",#"gpt-3.5-turbo",

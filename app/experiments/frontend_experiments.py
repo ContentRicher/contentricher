@@ -10,7 +10,15 @@ from typing import Literal, List
 
 import os
 from dotenv import load_dotenv
+import os
+
+
 load_dotenv()
+
+API_KEY=os.getenv("API_KEY")
+MISTRAL_API_KEY=os.getenv("MISTRAL_API_KEY")
+
+chosen_model = 'GPT-3.5'#'Mistral Small'
 
 
 # Text input for article with default text
@@ -75,9 +83,22 @@ st.set_page_config(page_title='MTLab WIP', layout="wide")#, initial_sidebar_stat
 st.sidebar.title('Navigation')
 st.sidebar.write('Informationen zu Personen')
 
-st.session_state.model = st.sidebar.selectbox(
+if API_KEY != "[PUT YOUR API KEY HERE]" and MISTRAL_API_KEY !="[PUT YOUR MISTRAL API KEY HERE]":
+    st.session_state.model = st.sidebar.selectbox(
+        'Wahl des Sprachmodells',
+        ('Mistral Small', 'GPT-3.5'))
+elif API_KEY != "[PUT YOUR API KEY HERE]":
+    st.session_state.model = st.sidebar.selectbox(
     'Wahl des Sprachmodells',
-    ('Mistral Small', 'GPT-3.5'))
+    ('GPT-3.5', 'Key for Mistral missing'))
+elif MISTRAL_API_KEY != "[PUT YOUR MISTRAL API KEY HERE]":
+    st.session_state.model = st.sidebar.selectbox(
+    'Wahl des Sprachmodells',
+    ('Key for Mistral missing', 'Key for GPT-3.5 missing'))
+else: 
+    st.session_state.model = st.sidebar.selectbox(
+    'Wahl des Sprachmodells',
+    ('No Keys found'))
 wf.chosen_model = st.session_state.model
 
 #st.sidebar.write('Login')
