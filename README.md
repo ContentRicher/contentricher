@@ -22,7 +22,7 @@ It is a web- and AI-based system that detects relevant parts in given texts that
 
 To run the app, change to the /app/experiments folder and install the libraries from the requirements.txt via 
 pip install -r requirements.txt
-Then, in the .env file in the app/experiments folder, put API_KEY = "[YOUR API KEY HERE]" (for using GPT-3.5 from OpenAI) and put MISTRAL_API_KEY = "[YOUR MISTRAL_API KEY HERE]" (for using the Mistral Small Model).
+Then, in the .env file in the app/experiments folder, put API_KEY = "[YOUR OPENAI API KEY HERE]" (for using GPT-3.5 from OpenAI) and/or put MISTRAL_API_KEY = "[YOUR MISTRAL_API KEY HERE]" (for using the Mistral Small Model).
 Finally, run the app from the experiments folder with: 
 streamlit run frontend_experiments.py
   
