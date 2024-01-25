@@ -6,7 +6,7 @@ import langchain_core
 from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
 #from langchain.prompts import PromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field, validator
-from typing import Literal, List
+from typing import List
 
 import os
 from dotenv import load_dotenv
@@ -62,6 +62,9 @@ if "model" not in st.session_state:
 if "isall" not in st.session_state:
     st.session_state.isall = False
 
+if "button_find_disabled" not in st.session_state:
+    st.session_state.button_find_disabled = False
+
 
 def set_clicked():
     st.session_state.clicked = True
@@ -83,22 +86,22 @@ st.set_page_config(page_title='MTLab WIP', layout="wide")#, initial_sidebar_stat
 st.sidebar.title('Navigation')
 st.sidebar.write('Informationen zu Personen')
 
-if API_KEY != "[PUT YOUR API KEY HERE]" and MISTRAL_API_KEY !="[PUT YOUR MISTRAL API KEY HERE]":
+if ('GPT-3.5' in wf.options) and ('Mistral Small' in wf.options):
     st.session_state.model = st.sidebar.selectbox(
         'Wahl des Sprachmodells',
         ('Mistral Small', 'GPT-3.5'))
-elif API_KEY != "[PUT YOUR API KEY HERE]":
+elif 'GPT-3.5' in wf.options:
     st.session_state.model = st.sidebar.selectbox(
     'Wahl des Sprachmodells',
-    ('GPT-3.5', 'Key for Mistral missing'))
-elif MISTRAL_API_KEY != "[PUT YOUR MISTRAL API KEY HERE]":
+    ('GPT-3.5', 'Key für Mistral fehlt'))
+elif 'Mistral Small' in wf.options:
     st.session_state.model = st.sidebar.selectbox(
     'Wahl des Sprachmodells',
-    ('Key for Mistral missing', 'Key for GPT-3.5 missing'))
+    ('Mistral Small', 'Key für GPT-3.5 fehlt'))
 else: 
-    st.session_state.model = st.sidebar.selectbox(
-    'Wahl des Sprachmodells',
-    ('No Keys found'))
+    st.session_state.model = None
+    ##deactivate buttons:
+    st.session_state.button_find_disabled = True
 wf.chosen_model = st.session_state.model
 
 #st.sidebar.write('Login')
@@ -119,14 +122,17 @@ with middle_column:
 
     article_text = st.text_area("Artikel Text", height=400, value = st.session_state.user_input)
 
+    if st.session_state.button_find_disabled == True: ##Button disabled
+        st.markdown('No Key found. Please insert your key in the .env file.')
 
     # Button below the text area right
-    if st.button('Finde Personen'):
+    if st.button('Finde Personen', disabled=st.session_state.button_find_disabled):
         #st.success('Personen hervorgehoben.')
         st.session_state.find_person_clicked = True
         st.session_state.clicked = False ##reset, not showing elements that have nothing to do with new selection
         st.session_state.user_input = article_text ##TODO check if it always gets the current text
         st.session_state.parsed_ents = wf.get_all_wiki_urls(st.session_state.user_input)
+
         people = dict()
         people = st.session_state.parsed_ents.entities
         st.session_state.wiki_images = dict()

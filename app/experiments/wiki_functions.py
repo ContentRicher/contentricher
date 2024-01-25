@@ -10,12 +10,12 @@ import langchain_core
 from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
 #from langchain.prompts import PromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field, validator
-from typing import Literal, List
+from typing import List
 
 import wikipedia
-import random
+#import random
 
-import requests, os
+import requests
 from PIL import Image
 
 ##for Mistral:
@@ -48,6 +48,15 @@ mistral_temperature = 0.15
 mistral_client = MistralClient(api_key=MISTRAL_API_KEY)
 
 chosen_model = 'GPT-3.5'#'Mistral Small'
+
+if API_KEY != "[PUT YOUR OPENAI API KEY HERE]" and MISTRAL_API_KEY !="[PUT YOUR MISTRAL API KEY HERE]":
+    options = ['Mistral Small', 'GPT-3.5']
+elif API_KEY != "[PUT YOUR OPENAI API KEY HERE]":
+    options = ['GPT-3.5']
+elif MISTRAL_API_KEY != "[PUT YOUR MISTRAL API KEY HERE]":
+    options = ['Mistral Small']
+else: 
+    options = []
 
 
 #from langchain.llms import OpenAI
@@ -234,7 +243,7 @@ def get_page_content(context, title):
         'https://en.wikipedia.org/w/api.php',
             params={
                 'action': 'parse',
-                'page': title,#'Bla Bla Bla',
+                'page': title,
                 'format': 'json',
             }
         ).json()
