@@ -22,6 +22,8 @@ It is a web- and AI-based system that detects relevant parts in given texts that
 
 To run the app, create a virtual environment with python==3.9.11 as the python version:  
 ```conda create --name [PUT YOUR ENVIROMENT NAME HERE] python=3.9.11```  
+Activate the environment with: 
+```conda activate [PUT YOUR ENVIROMENT NAME HERE]```  
 Then change to the /app/experiments folder and install the libraries from the requirements.txt via:  
 ```pip install -r requirements.txt```  
 Then, in the .env file in the app/experiments folder, put  
