@@ -25,6 +25,10 @@ Then change to the /app/experiments folder and install the libraries from the re
 Then, in the .env file in the app/experiments folder, put API_KEY = "[YOUR OPENAI API KEY HERE]" (for using GPT-3.5 from OpenAI) and/or put MISTRAL_API_KEY = "[YOUR MISTRAL_API KEY HERE]" (for using the Mistral Small Model).
 Finally, run the app from the experiments folder with: 
 streamlit run frontend_experiments.py
+
+## Current state of development
+
+Currently, we retrieve information from Wikipedia. The next step will be to include information from Instagram (both from text and images).
   
 ## 📘 License
 
