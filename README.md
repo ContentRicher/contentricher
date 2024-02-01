@@ -29,7 +29,9 @@ Then change to the ./app folder and install the libraries from the requirements.
 Then, in the .env file in the app/experiments folder, put  
 ```API_KEY = "[YOUR OPENAI API KEY HERE]"``` (for using GPT-3.5 from OpenAI) and/or put   
 ```MISTRAL_API_KEY = "[YOUR MISTRAL_API KEY HERE]"``` (for using the Mistral Small Model).  
-Finally, run the app from the experiments folder with:  
+Finally, change into the ./experiments folder  
+```cd experiments/```  
+and run the app from the experiments folder with:  
 ```streamlit run frontend_experiments.py```
 
 ## Current state of development
