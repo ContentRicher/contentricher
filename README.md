@@ -24,14 +24,16 @@ To run the app, create a virtual environment with python==3.9.11 as the python v
 ```conda create --name [PUT YOUR ENVIROMENT NAME HERE] python=3.9.11```  
 Activate the environment with: 
 ```conda activate [PUT YOUR ENVIROMENT NAME HERE]```  
-Then change to the ./app folder and install the libraries from the requirements.txt via:  
+Then change to the ./app folder  
+```cd app/```  
+and install the libraries from the requirements.txt via:  
 ```pip install -r requirements.txt```  
-Then, in the .env file in the app/experiments folder, put  
+Change into the experiments folder  
+```cd experiments/```  
+Then, open the .env file in the experiments folder. You may need to press ```CMD + SHIFT + .``` to show the file.  Insert your key/s in the placeholders
 ```API_KEY = "[YOUR OPENAI API KEY HERE]"``` (for using GPT-3.5 from OpenAI) and/or put   
 ```MISTRAL_API_KEY = "[YOUR MISTRAL_API KEY HERE]"``` (for using the Mistral Small Model).  
-Finally, change into the ./experiments folder  
-```cd experiments/```  
-and run the app from the experiments folder with:  
+Finally, run the app from the experiments folder with:  
 ```streamlit run frontend_experiments.py```
 
 ## Current state of development
