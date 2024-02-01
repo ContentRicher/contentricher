@@ -24,7 +24,7 @@ To run the app, create a virtual environment with python==3.9.11 as the python v
 ```conda create --name [PUT YOUR ENVIROMENT NAME HERE] python=3.9.11```  
 Activate the environment with: 
 ```conda activate [PUT YOUR ENVIROMENT NAME HERE]```  
-Then change to the /app/experiments folder and install the libraries from the requirements.txt via:  
+Then change to the ./app folder and install the libraries from the requirements.txt via:  
 ```pip install -r requirements.txt```  
 Then, in the .env file in the app/experiments folder, put  
 ```API_KEY = "[YOUR OPENAI API KEY HERE]"``` (for using GPT-3.5 from OpenAI) and/or put   
