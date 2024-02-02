@@ -65,13 +65,22 @@ if "isall" not in st.session_state:
 if "button_find_disabled" not in st.session_state:
     st.session_state.button_find_disabled = False
 
+if "found_a_wiki_entry" not in st.session_state:
+    st.session_state.found_a_wiki_entry = False
+    
+
 
 def set_clicked():
     st.session_state.clicked = True
 
-def set_relevant_parts_to_show(context, wiki_title):
-    text = wf.get_page_content(context, wiki_title)
-    st.session_state.relevant_parts_to_show = wf.translate_content(wf.get_relevant_parts(context, text[:8000], wiki_title), 'en', 'de')
+def set_relevant_parts_to_show(context, wiki_title, language='de', translate=True):
+    try:
+        text = wf.get_page_content(context, wiki_title, language)
+        st.session_state.relevant_parts_to_show = wf.get_relevant_parts(context, text[:8000], wiki_title, translate)#wf.translate_content(wf.get_relevant_parts(context, text[:8000], wiki_title), 'en', 'de')
+    except:
+        text = ''
+        st.session_state.relevant_parts_to_show = None
+        #print('could not retrieve page')
     st.session_state.clicked = True
     st.session_state.isall = False
 
@@ -80,6 +89,9 @@ def create_dummy_image():
     # This function would create and return a dummy image
     # Here we just use a placeholder from the web for demonstration
     return 'https://via.placeholder.com/150'
+
+def sel_callback():
+    st.session_state.isall = False#st.session_state.sel
 
 st.set_page_config(page_title='MTLab WIP', layout="wide")#, initial_sidebar_state="expanded")#"collapsed")
 # Set up the sidebar with links and a search bar
@@ -136,28 +148,44 @@ with middle_column:
         people = dict()
         people = st.session_state.parsed_ents.entities
         st.session_state.wiki_images = dict()
+
         for i in range(len(people)):
             ent = people[i]
             person_name = ent.name
             ##for now, taking the first entry, TODO: possibly improve wikipedia disambiguation in backend function
             try:
-                wiki_url_title = ent.urls[0].title
+                wiki_title = ent.urls[0].title
+                wiki_url = ent.urls[0].url
 
-                the_page = wiki_url_title
+                the_page = wiki_title
+
+                the_page =  the_page.replace(' ', '_')
                 # get JSON data and extract image URL
                 the_url = wf.get_image_url(the_page)
+
                 # if the URL is not None ...
-                if (the_url):
+                if (the_url):  #not the_url == None: #
                     # download that image
-                    wf.download_image(the_url, the_page)
-                        
-                    input_image_path = my_folder+the_page+'.jpg'#os.path.join(my_folder, my_folder+the_page+'.jpg')#os.path.basename(the_page + '.jpg'))
-                    output_image_path = my_folder+the_page+'_sm.jpg'#os.path.join(my_folder, my_folder+the_page+'.jpg'))#os.path.basename(the_page)+"_sm.jpg")
+                    file_ext = wf.download_image(the_url, the_page)
+                    input_image_path = my_folder+the_page.replace(' ', '_')+file_ext #'.jpg'#os.path.join(my_folder, my_folder+the_page+'.jpg')#os.path.basename(the_page + '.jpg'))
+                    output_image_path = my_folder+the_page.replace(' ', '_')+'_sm'+file_ext #jpg'#os.path.join(my_folder, my_folder+the_page+'.jpg'))#os.path.basename(the_page)+"_sm.jpg")
 
                     wf.shrink_image(input_image_path, output_image_path)
                     st.session_state.wiki_images[i] = output_image_path
                 else:
-                    print("No image file for " + the_page)
+
+                    ## Managing to get some additional images, though not all   
+                    try:
+                        
+                        image_url, path_saved = wf.get_image_url_backup(wiki_url, the_page)
+                        file_ext = '.' + image_url.split('.')[-1].lower()
+                        input_image_path = my_folder+the_page.replace(' ', '_')+file_ext#'.jpg'
+                        output_image_path = my_folder+the_page.replace(' ', '_')+"_sm"+file_ext#'_sm.jpg'
+                        wf.shrink_image(input_image_path, output_image_path)
+                        st.session_state.wiki_images[i] = output_image_path
+                    except:
+                        print("No image file for " + the_page)
+                    
             except: 
                 pass ##will take default image below in 'except' if an image is not found
 
@@ -177,7 +205,6 @@ with middle_column:
         people = dict()
         people = st.session_state.parsed_ents.entities
 
-        i = 0
         for i in range(len(people)):
 
             ent = people[i]
@@ -186,6 +213,9 @@ with middle_column:
 
             col1, col2, col3 = st.columns([1, 2, 1])
 
+            #st.session_state.relevant_parts_to_show = None
+            st.session_state.found_a_wiki_entry = False
+            lang = 'de'
 
             # Right column for articles related to the person
             with col2:
@@ -193,17 +223,30 @@ with middle_column:
                 st.write(f"Informationen zu {person_name}")
                 # Relevant Information:
 
-                ##for now, taking the first entry, TODO: possibly improve wikipedia disambiguation in backend function
-                try:
-                    wiki_url = ent.urls[0].url
-                    wiki_url_title = ent.urls[0].title
-                    wiki_line = f"""- [Wikipedia]({wiki_url}) - {wiki_url_title}"""
+                ##for now, taking the first entry, TODO: check if URL valid, else probably also the rest is not existing
+                num_iter = 0
+                
+                while st.session_state.found_a_wiki_entry == False and num_iter <= 2 and num_iter < len(ent.urls):
+                    try:
+                        wiki_url = ent.urls[num_iter].url
+                        wiki_url_title = ent.urls[num_iter].title
+                        st.session_state.found_a_wiki_entry = wf.check_wiki_valid(wiki_url)
+                        ##only if url is valid:
+                        if st.session_state.found_a_wiki_entry: 
+                            wiki_title = ent.urls[num_iter].title
+                            lang = ent.urls[num_iter].language
+                            wiki_line = f"""- [Wikipedia]({wiki_url}) - {wiki_url_title}"""
+                            #text = wf.get_page_content(context, wiki_title, lang)
+                        else: 
+                            wiki_line = f"""- Kein Eintrag auf Wikipedia gefunden."""
 
-                except: 
-                    wiki_url = ''
-                    wiki_url_title = ''
-                    wiki_line = f"""- Kein Eintrag auf Wikipedia gefunden."""
+                    except: 
+                        wiki_url = ''
+                        wiki_url_title = ''
+                        wiki_line = f"""- Kein Eintrag auf Wikipedia gefunden."""
 
+                    num_iter += 1
+                    #i += 1
 
 
                 insta_line = f""""""#- Instagram Eintrag - TODO"""
@@ -226,12 +269,12 @@ with middle_column:
                     except: ##e.g. no image found before
                         st.image(create_dummy_image(), width=100, caption=person_name)
 
-            with col3:
-                st.write(f"Aktion")
-                st.button(f"Relevante Auszüge", on_click=set_relevant_parts_to_show, args=(context, wiki_url_title), key = "button"+str(i))
-
-
-            i += 1   
+            if st.session_state.found_a_wiki_entry:
+                with col3:
+                    ##TODO: Show button only if url is valid and displayed
+                    st.write(f"Aktion")
+                    if st.button(f"Relevante Auszüge", key = "button"+str(i), on_click = sel_callback):
+                        set_relevant_parts_to_show(context, wiki_url_title, lang, True)
 
 
         for file in os.listdir(my_folder): 
@@ -256,9 +299,10 @@ with right_column:
         original_title = '<p style="font-family:Courier; color:White; font-size: 45px;">_</p>'
         st.markdown(original_title, unsafe_allow_html=True)
 
-        i = 0
-        if st.session_state.clicked:# and not st.session_state.found_ents:
+        
+        if st.session_state.clicked and st.session_state.found_a_wiki_entry:# and not st.session_state.found_ents:
 
+            i = 0
 
             #text_to_show = wf.concatenate_relevant_parts_to_show(st.session_state.relevant_parts_to_show)
             #text_area_input = st.text_area("Wikipedia Artikel", height=int(150*len(text_to_show)/(38*5)), placeholder = "", value = text_to_show)#st.session_state.wiki_input)
@@ -266,16 +310,18 @@ with right_column:
 
             st.session_state.isall = st.checkbox('selektiere / deselektiere alle', key='sel', value=False)
 
-            for rp in st.session_state.relevant_parts_to_show.relevantparts:
+            if not st.session_state.relevant_parts_to_show ==  None: 
+                for rp in st.session_state.relevant_parts_to_show.relevantparts:
 
-                col1b, col2b = st.columns([0.5, 10])
-                with col1b:
-                    st.checkbox('', key = "checkbox"+str(i), value=st.session_state.isall)#False)
-                with col2b:
-                    ##adapting to usually 42 characters * 6 rows fitting a height 150 text_area
-                    text_area_input = st.text_area("Wikipedia Artikel", height=int(150*len(rp.fact)/(38*5)), placeholder = "", value = rp.fact, key = "text_area"+str(i))#"Text not yet retrieved")
-                    st.session_state.text_area_input = text_area_input
-                i += 1
+                    col1b, col2b = st.columns([0.5, 10])
+                    with col1b:
+                        st.checkbox('', key = "checkbox"+str(i), value=st.session_state.isall, on_change = sel_callback)#False)
+
+                    with col2b:
+                        ##adapting to usually 42 characters * 6 rows fitting a height 150 text_area
+                        text_area_input = st.text_area("Wikipedia Artikel", height=int(150*len(rp.fact)/(38*5)), placeholder = "", value = rp.fact, key = "text_area"+str(i))#"Text not yet retrieved")
+                        st.session_state.text_area_input = text_area_input
+                    i += 1
 
             # Two buttons, one active and one inactive
             if st.button('Quelle anzeigen'):
