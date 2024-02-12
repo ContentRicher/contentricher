@@ -53,6 +53,15 @@ if "relevant_parts_to_show" not in st.session_state:
 if "parsed_ents" not in st.session_state:
     st.session_state.parsed_ents = None
 
+if "parsed_instas" not in st.session_state:
+    st.session_state.parsed_instas = None
+
+if "insta_valids" not in st.session_state:
+    st.session_state.insta_valids = dict()
+
+if "insta_verifieds" not in st.session_state:
+    st.session_state.insta_verifieds = dict()
+
 if "wiki_images" not in st.session_state:
     st.session_state.wiki_images = None
 
@@ -67,6 +76,12 @@ if "button_find_disabled" not in st.session_state:
 
 if "found_a_wiki_entry" not in st.session_state:
     st.session_state.found_a_wiki_entry = False
+
+if "include_insta" not in st.session_state:
+    st.session_state.include_insta = False
+
+if "wiki_lines" not in st.session_state:
+    st.session_state.wiki_lines = None
     
 
 
@@ -92,6 +107,42 @@ def create_dummy_image():
 
 def sel_callback():
     st.session_state.isall = False#st.session_state.sel
+
+def insta_callback():
+    if st.session_state.include_insta == False:
+        st.session_state.include_insta = True
+    else:
+        st.session_state.include_insta = False
+    ##tmp for debugging:
+    #st.session_state.include_insta = True
+
+def get_wiki_lines(ent):
+    st.session_state.found_a_wiki_entry = False
+    #lang = 'de'
+    ##for now, taking the first entry, TODO: check if URL valid, else probably also the rest is not existing
+    num_iter = 0            
+    while st.session_state.found_a_wiki_entry == False and num_iter <= 2 and num_iter < len(ent.urls):
+        try:
+            wiki_url = ent.urls[num_iter].url
+            wiki_title = ent.urls[num_iter].title
+            ##TODO: ensure Insta session works or else try a different method to check validity or show anyways
+            st.session_state.found_a_wiki_entry = wf.check_wiki_valid(wiki_url)
+            ##only if url is valid:
+            if st.session_state.found_a_wiki_entry: 
+                wiki_title = ent.urls[num_iter].title
+                lang = ent.urls[num_iter].language
+                wiki_line = f"""- [Wikipedia]({wiki_url}) - {wiki_title}"""
+                #text = wf.get_page_content(context, wiki_title, lang)
+            else: 
+                wiki_line = f"""- Kein Eintrag auf Wikipedia gefunden."""
+
+        except: 
+            wiki_url = ''
+            wiki_title = ''
+            wiki_line = f"""- Kein Eintrag auf Wikipedia gefunden."""
+
+        num_iter += 1
+    return wiki_line
 
 st.set_page_config(page_title='MTLab WIP', layout="wide")#, initial_sidebar_state="expanded")#"collapsed")
 # Set up the sidebar with links and a search bar
@@ -137,57 +188,101 @@ with middle_column:
     if st.session_state.button_find_disabled == True: ##Button disabled
         st.markdown('No Key found. Please insert your key in the .env file.')
 
-    # Button below the text area right
-    if st.button('Finde Personen', disabled=st.session_state.button_find_disabled):
-        #st.success('Personen hervorgehoben.')
-        st.session_state.find_person_clicked = True
-        st.session_state.clicked = False ##reset, not showing elements that have nothing to do with new selection
-        st.session_state.user_input = article_text ##TODO check if it always gets the current text
-        st.session_state.parsed_ents = wf.get_all_wiki_urls(st.session_state.user_input)
+    col1a, col2a = st.columns([1, 4])
+    with col2a:
+        ##Setting a variable that says whether instagram pages are being checked
+        st.session_state.include_insta = st.checkbox('Inklusive Instagram', key = "checkbox_insta", value=False)#, on_change = insta_callback)
 
-        people = dict()
-        people = st.session_state.parsed_ents.entities
-        st.session_state.wiki_images = dict()
+    with col1a:
 
-        for i in range(len(people)):
-            ent = people[i]
-            person_name = ent.name
-            ##for now, taking the first entry, TODO: possibly improve wikipedia disambiguation in backend function
-            try:
-                wiki_title = ent.urls[0].title
-                wiki_url = ent.urls[0].url
+        # Button below the text area right
+        if st.button('Finde Personen', disabled=st.session_state.button_find_disabled):
+            #st.success('Personen hervorgehoben.')
+            st.session_state.find_person_clicked = True
+            st.session_state.clicked = False ##reset, not showing elements that have nothing to do with new selection
+            st.session_state.user_input = article_text ##TODO check if it always gets the current text
+            st.session_state.parsed_ents = wf.get_all_wiki_urls(st.session_state.user_input)
+            st.session_state.parsed_instas = dict()
 
-                the_page = wiki_title
+            people = dict()
+            people = st.session_state.parsed_ents.entities
+            st.session_state.wiki_images = dict()
+            st.session_state.wiki_lines = dict()
 
-                the_page =  the_page.replace(' ', '_')
-                # get JSON data and extract image URL
-                the_url = wf.get_image_url(the_page)
+            for i in range(len(people)):
+                ent = people[i]
 
-                # if the URL is not None ...
-                if (the_url):  #not the_url == None: #
-                    # download that image
-                    file_ext = wf.download_image(the_url, the_page)
-                    input_image_path = my_folder+the_page.replace(' ', '_')+file_ext #'.jpg'#os.path.join(my_folder, my_folder+the_page+'.jpg')#os.path.basename(the_page + '.jpg'))
-                    output_image_path = my_folder+the_page.replace(' ', '_')+'_sm'+file_ext #jpg'#os.path.join(my_folder, my_folder+the_page+'.jpg'))#os.path.basename(the_page)+"_sm.jpg")
+                st.session_state.wiki_lines[i] = get_wiki_lines(ent)
+                print(st.session_state.wiki_lines[i])
 
-                    wf.shrink_image(input_image_path, output_image_path)
-                    st.session_state.wiki_images[i] = output_image_path
-                else:
+                person_name = ent.name
+                ##for now, taking the first entry, TODO: possibly improve wikipedia disambiguation in backend function
+                try:
+                    wiki_title = ent.urls[0].title
+                    wiki_url = ent.urls[0].url
 
-                    ## Managing to get some additional images, though not all   
-                    try:
-                        
-                        image_url, path_saved = wf.get_image_url_backup(wiki_url, the_page)
-                        file_ext = '.' + image_url.split('.')[-1].lower()
-                        input_image_path = my_folder+the_page.replace(' ', '_')+file_ext#'.jpg'
-                        output_image_path = my_folder+the_page.replace(' ', '_')+"_sm"+file_ext#'_sm.jpg'
+                    the_page = wiki_title
+
+                    the_page =  the_page.replace(' ', '_')
+                    # get JSON data and extract image URL
+                    the_url = wf.get_image_url(the_page)
+
+                    # if the URL is not None ...
+                    if (the_url):  #not the_url == None: #
+                        # download that image
+                        file_ext = wf.download_image(the_url, the_page)
+                        input_image_path = my_folder+the_page.replace(' ', '_')+file_ext #'.jpg'#os.path.join(my_folder, my_folder+the_page+'.jpg')#os.path.basename(the_page + '.jpg'))
+                        output_image_path = my_folder+the_page.replace(' ', '_')+'_sm'+file_ext #jpg'#os.path.join(my_folder, my_folder+the_page+'.jpg'))#os.path.basename(the_page)+"_sm.jpg")
+
                         wf.shrink_image(input_image_path, output_image_path)
                         st.session_state.wiki_images[i] = output_image_path
-                    except:
-                        print("No image file for " + the_page)
-                    
-            except: 
-                pass ##will take default image below in 'except' if an image is not found
+                    else:
+
+                        ## Managing to get some additional images, though not all   
+                        try:
+                            
+                            image_url, path_saved = wf.get_image_url_backup(wiki_url, the_page)
+                            file_ext = '.' + image_url.split('.')[-1].lower()
+                            input_image_path = my_folder+the_page.replace(' ', '_')+file_ext#'.jpg'
+                            output_image_path = my_folder+the_page.replace(' ', '_')+"_sm"+file_ext#'_sm.jpg'
+                            wf.shrink_image(input_image_path, output_image_path)
+                            st.session_state.wiki_images[i] = output_image_path
+                        except:
+                            print("No image file for " + the_page)
+
+                    ##TBD if necessary: set default: 
+                    #st.session_state.parsed_instas[i] = None
+                    #all_insta_options = None
+                    ##try getting insta profiles:
+                    ##Done: Only do this ad-hoc when the insta-info is desired. It takes longer otherwise to show any results at the beginning
+                    if st.session_state.include_insta == True:
+
+                        all_insta_options = wf.get_insta_urls(wiki_title, st.session_state.user_input)
+
+                        
+                        try:
+                            st.session_state.parsed_instas[i] = all_insta_options.urls[0]
+                        except:
+                            st.session_state.parsed_instas[i] = None
+
+                        insta_url = None
+                        st.session_state.insta_valids[i] = dict()
+                        st.session_state.insta_verifieds[i] = dict()
+                        try:
+                            insta_url = st.session_state.parsed_instas[i].url
+                            #insta_valid, insta_verified = wf.check_insta_valid_and_verified(insta_url)
+                            #st.session_state.insta_valids[i] = insta_valid
+                            #st.session_state.insta_verifieds[i] = insta_verified
+                            ##try downloading posts, later decide where to do it - e.g. on button click:
+                            #wf.download_posts(wf.extract_insta_username(insta_url))
+
+                        except:
+                            pass
+                            #st.session_state.insta_valids[i] = None
+                            #st.session_state.insta_verifieds[i] = None
+
+                except: 
+                    pass ##will take default image below in 'except' if an image is not found
 
 
     st.markdown("""___""")
@@ -205,6 +300,16 @@ with middle_column:
         people = dict()
         people = st.session_state.parsed_ents.entities
 
+        ##New: one line instead of repeating elements: 
+        col1b, col2b, col3b = st.columns([1, 2, 1])
+        with col1b:
+            st.write('**Name**')
+        with col2b:
+            st.write(f"**Informationsquellen**")
+        with col3b: 
+            st.write(f"**Aktion**")
+
+
         for i in range(len(people)):
 
             ent = people[i]
@@ -213,44 +318,62 @@ with middle_column:
 
             col1, col2, col3 = st.columns([1, 2, 1])
 
-            #st.session_state.relevant_parts_to_show = None
-            st.session_state.found_a_wiki_entry = False
+            ##st.session_state.relevant_parts_to_show = None
+            #st.session_state.found_a_wiki_entry = False
             lang = 'de'
 
             # Right column for articles related to the person
             with col2:
 
-                st.write(f"Informationen zu {person_name}")
-                # Relevant Information:
+                wiki_line = st.session_state.wiki_lines[i]
 
-                ##for now, taking the first entry, TODO: check if URL valid, else probably also the rest is not existing
-                num_iter = 0
-                
-                while st.session_state.found_a_wiki_entry == False and num_iter <= 2 and num_iter < len(ent.urls):
-                    try:
-                        wiki_url = ent.urls[num_iter].url
-                        wiki_url_title = ent.urls[num_iter].title
-                        st.session_state.found_a_wiki_entry = wf.check_wiki_valid(wiki_url)
-                        ##only if url is valid:
-                        if st.session_state.found_a_wiki_entry: 
-                            wiki_title = ent.urls[num_iter].title
-                            lang = ent.urls[num_iter].language
-                            wiki_line = f"""- [Wikipedia]({wiki_url}) - {wiki_url_title}"""
-                            #text = wf.get_page_content(context, wiki_title, lang)
-                        else: 
-                            wiki_line = f"""- Kein Eintrag auf Wikipedia gefunden."""
+                ##no matter whether it turned out to exist or not, take the title received as most probable wikipedia title
+                wiki_title = ent.urls[0].title
 
-                    except: 
-                        wiki_url = ''
-                        wiki_url_title = ''
-                        wiki_line = f"""- Kein Eintrag auf Wikipedia gefunden."""
+                if st.session_state.include_insta == True:
 
-                    num_iter += 1
-                    #i += 1
+                    if not (wiki_title == '' or wiki_title == None):
+
+                        instas = dict()
+                        instas = st.session_state.parsed_instas
+                        insta_url = None
+
+                        try:
+                            insta_url = instas[i].url
+                            print(insta_url)
+
+                            ##TODO: think of when not to verify, e.g. if no Insta Sessio provided, but avert user it's not sure
+                            #insta_valid, insta_verified = wf.check_insta_valid_and_verified(insta_url)
+                            ##temporarily put default values until Insta Login issue is resolved:
+                            insta_valid = True
+                            insta_verified = False
+                            #insta_valid = st.session_state.insta_valids[i] 
+                            #insta_verified = st.session_state.insta_verifieds[i] 
+                            if not (insta_valid == None) and insta_valid == True:
+                                #insta_title = instas[i].title
+                                insta_username = wf.extract_insta_username(insta_url)
+                                if not (insta_verified == None) and insta_verified == True:
+                                    insta_line = f"""- [Instagram]({insta_url}) - {insta_username} :white_check_mark:"""
+                                else: 
+                                    insta_line = f"""- [Instagram]({insta_url}) - {insta_username}"""
+                            else: 
+                                print('insta url not valid')
+                                insta_url = ''
+                                insta_title = ''
+                                insta_line = f"""- Kein Eintrag auf Instagram gefunden."""
+
+                        except: 
+                            print('in except for insta url')
+                            insta_url = ''
+                            insta_title = ''
+                            insta_line = f"""- Kein Eintrag auf Instagram gefunden."""
 
 
-                insta_line = f""""""#- Instagram Eintrag - TODO"""
-                    
+                    else:
+                        insta_line = f""""""#- Instagram Eintrag - TODO"""
+                        
+                else:
+                    insta_line = f""""""#- Instagram Eintrag - TODO"""
 
                 st.markdown(f"""
                 """+ wiki_line +"""
@@ -258,23 +381,29 @@ with middle_column:
                 """)
 
             # Left column for face image
-            with col1:                        
-                st.write(person_name)
+            with col1:                     
+                st.write(f"{person_name}")
                 if person_name == 'Heidi Klums': ##tmp only, to replace with retrieved image
-                    st.image("../img/Heidi_Klum_by_Glenn_Francis.jpg", width=100, caption=person_name)
+                    st.image("../img/Heidi_Klum_by_Glenn_Francis.jpg", width=100)#, caption=person_name)
                 else:
                     #st.image(create_dummy_image(), width=100, caption=person_name)
                     try: 
-                        st.image(st.session_state.wiki_images[i], width = 100, caption=person_name)
+                        st.image(st.session_state.wiki_images[i], width = 100)#, caption=person_name)
                     except: ##e.g. no image found before
-                        st.image(create_dummy_image(), width=100, caption=person_name)
+                        st.image(create_dummy_image(), width=100)#, caption=person_name)
 
             if st.session_state.found_a_wiki_entry:
                 with col3:
                     ##TODO: Show button only if url is valid and displayed
-                    st.write(f"Aktion")
+                    #st.write(f"Aktion")
                     if st.button(f"Relevante Auszüge", key = "button"+str(i), on_click = sel_callback):
-                        set_relevant_parts_to_show(context, wiki_url_title, lang, True)
+                        set_relevant_parts_to_show(context, wiki_title, lang, True)
+                    if st.button(f"Analysiere Instagram", key = "button"+str(i)+"b"):
+                        try:
+                            pass
+                            #on_click = wf.download_posts(insta_username)
+                        except:
+                            print("downloading of instaposts did not work")
 
 
         for file in os.listdir(my_folder): 

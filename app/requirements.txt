@@ -13,3 +13,4 @@ Requests==2.31.0
 streamlit==1.29.0
 wikipedia==1.4.0
 lxml==5.1.0
+instaloader==4.10.3

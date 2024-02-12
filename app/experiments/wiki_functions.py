@@ -26,8 +26,13 @@ from mistralai.models.chat_completion import ChatMessage
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, unquote 
 
+import instaloader
+
+from datetime import datetime
+from itertools import dropwhile, takewhile
+
 # set the folder name where images will be stored
-my_folder = "../img/"#'wiki_images'
+my_folder = "../img/"
 
 # create the folder in the current working directory
 # in which to store the downloaded images
@@ -94,10 +99,19 @@ class URL_entry(BaseModel):
     rank: int = Field(description = "This is the rank of probability among all URL suggestions.")
     title: str = Field(description = "This is the title of the Wikipedia page")
     url: str = Field(description = "This is the URL of the suggested Wikipedia page")
-    language: str = Field(description = "This is the language of the Wikipedia page, written in abbreviation")
+    language: str = Field(description = "This is the language of the Wikipedia page, written as abbreviation")
 
 class URL_propositions(BaseModel):
     urls: List[URL_entry]
+
+class Insta_URL_entry(BaseModel):
+    rank: int = Field(description = "This is the rank of probability among all Insta URL suggestions.")
+    title: str = Field(description = "This is the title/name of the Instagram profile")
+    url: str = Field(description = "This is the URL of the suggested Instagram page")
+    language: str = Field(description = "This is the language of the Instagram page, written as abbreviation")
+
+class Insta_URL_propositions(BaseModel):
+    urls: List[Insta_URL_entry]
 
 class Entity(BaseModel):
     name: str = Field(description = "This is the full name of the person")
@@ -137,7 +151,7 @@ class RankedWikiEntries(BaseModel):
 
 
 def ask_openai(system_intel, prompt):
-    result = client.chat.completions.create(model="gpt-4-1106-preview",#"gpt-3.5-turbo-1106",#"gpt-3.5-turbo",
+    result = client.chat.completions.create(model="gpt-3.5-turbo-0125",#"gpt-4-1106-preview",#"gpt-3.5-turbo-1106",#"gpt-3.5-turbo",
                                 messages = [{"role": "system", "content": system_intel},
                                         {"role": "user", "content": prompt}],
                                         stream=False
@@ -266,11 +280,61 @@ def get_all_wiki_urls(context):
     prompt += f"""Return your answer as plain JSON, and following the following format, return only the JSON object:
     {json_template}"""
 
-    res = ask_GPT(system_intel, prompt) ##TODO replace by langchain generic call (llm replaceable)
+    res = ask_GPT(system_intel, prompt) 
     model = get_model(chosen_model)
 
     ##Parse results
     parsed = parse_results(res, pydantic_object=Entities, llm=model)
+
+    return parsed
+
+
+##NOTE: it may invent a page,  mostly for the fanpage, e.g. if no such fanpage exists
+##TODO: put a try except block in the call that uses the results
+def get_insta_urls(entity, context):
+
+    system_intel = """You are an expert researcher and an expert in Instagram and Influencers."""
+    prompt = f"""Given the following person and the textual context, find the most probable Instagram profile/s with the URL/s that belong to that same person.
+    
+    Person: 
+    {entity}
+
+    Context: 
+    {context}
+    """
+
+
+    json_template = """{
+  "urls": [
+    {
+      "rank": 1,
+      "title": "Heidi Klum",
+      "profile": "@heidiklum",
+      "url": "https://www.instagram.com/heidiklum/",
+      "language": "en"
+    },
+    {
+      "rank": 2,
+      "title": "Heidi Klum Fanpage",
+      "url": "https://www.instagram.com/heidiklumly/",
+      "language": "en"
+    }
+  ]
+}"""
+
+    prompt += f"""
+    
+    Return your answer as plain JSON, following the following format:
+    JSON Template:
+    {json_template}"""
+
+    res = ask_GPT(system_intel, prompt)
+    #print(res)
+
+    model = get_model(chosen_model)
+
+    ##Parse results
+    parsed = parse_results(res, pydantic_object=Insta_URL_propositions, llm=model)
 
     return parsed
 
@@ -311,7 +375,6 @@ def get_options_string(title, language='de'):
     for li in li_tags:
         text = li.get_text()#strip=True, separator=' ')
         link = li.find('a')  # Find the <a> element within the <li>
-        #print()
                     
         if link and text: 
             href = link.get('href', '')
@@ -335,19 +398,9 @@ def get_page_content(context, title, language='de'):
         p = wikipedia.page(title, auto_suggest=False, redirect=True, preload=False)
     except: 
         
-        response = requests.get(
-        'https://en.wikipedia.org/w/api.php',
-            params={
-                'action': 'parse',
-                'page': title,
-                'format': 'json',
-            }
-        ).json()
-        best_entries = get_best_entry(context, response, title)
-
+        options_string = get_options_string(title, language)
+        best_entries = get_best_entry(context, options_string, title)
         s = best_entries.rankedLinks[0].title
-        ##before:
-        #s = random.choice(e.options)
         p = wikipedia.page(s)
 
     return p.content
@@ -717,7 +770,7 @@ def shrink_image(input_path, output_path, max_dimension=512):
     return resized_image
 
 
-def get_best_entry(context, html, title):
+def get_best_entry(context, options_string, title):
     json_template = """
     {
     "query": "Sustainable gardening",
@@ -750,11 +803,11 @@ def get_best_entry(context, html, title):
     }"""
 
     system_intel = f"""You are an expert on {title} and HTML."""
-    prompt = f"""Interpret the following html and then return only the links that are most appropriate to represent the real link page
+    prompt = f"""Interpret the following list of options for a wikipedia page (composed of a description of the option and its url) and then return only the links that are most appropriate to represent the real link page
     for {title} given the context below, in order of relevance, in a numbered list.
 
-    HTML:
-    {html}
+    List of options:
+    {options_string}
 
     Context: 
     {context}
@@ -774,11 +827,299 @@ def get_best_entry(context, html, title):
     return parsed
 
 
-
 ##check if a Wikipedia page exists, returns True or False
 def check_wiki_valid(url):
     r = requests.head(url)
     return r.ok
 
+
+def extract_insta_username(insta_url):
+    dest_username = insta_url.replace('https://www.instagram.com/', '')
+    if dest_username[-1] == '/':
+        dest_username = dest_username[:-1]
+    return dest_username
+
+
+def check_insta_valid_and_verified(url):
+    ##returning values for 'valid' and 'verified' insta profile
+
+    L = instaloader.Instaloader()
+
+    #L.interactive_login(username)
+    #L.login(username, password)
+    print(url)
+
+    dest_username = extract_insta_username(url)
+    #print('dest_username:')
+    #print(dest_username)
+
+    profile = None
+
+    try:
+        profile = instaloader.Profile.from_username(L.context, dest_username)
+        #get_insta_profile_infos(L, profile)
+        try:
+            if get_insta_verified_status(dest_username) == True:#profile) == True:
+                return True, True
+            else:
+                return True, False
+        except: ##sometimes Insta Login not working, still return true for valid Insta_page:
+            return True, False
+    except instaloader.exceptions.LoginRequiredException:
+        print("Login required to access this profile.")
+        # Handle LoginRequiredException
+        profile = None
+        return False, False
+    except instaloader.exceptions.ProfileNotExistsException:
+        print("The requested profile does not exist.")
+        # Handle ProfileNotExistsException
+        profile = None
+        return False, False
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        # Handle other exceptions
+        profile = None
+        return False, False
+    
+# def get_insta_verified_status(dest_username):#profile):
+#     from load_insta import L2
+#     profile = instaloader.Profile.from_username(L2.context, dest_username)
+#     if profile.is_verified:
+#         return True
+#     else:
+#         return False
+
+def get_insta_profile_infos(L, profile):
+    #profile = instaloader.Profile.from_username(L.context, pro)
+    print('got profile')
+    main_followers = profile.followers
+    no_posts = profile.mediacount
+    idx = profile.userid
+    print('The profile UserID')
+    print(idx)
+    print('The number of followers')
+    print(main_followers)
+    print('The total number of posts')
+    print(no_posts)
+    print('The profile is a verified profile?')
+    print(profile.is_verified)
+    print('before getting posts')
+    posts = profile.get_posts()
+    print(posts)
+    i = 0
+    for p in posts:
+        print(p.date)
+        if i == 3:
+            break
+        i += 1 
+    print('after getting posts')
+    print('\n')
+
+
+##TBD if it can be improved to work, then checking valid urls for insta at least would not necessarily require session-id
+def check_insta_valid2(url):   
+
+    headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+    }
+    #headers = {'User-Agent': 'CoolBot/0.0 (https://example.org/coolbot/; coolbot@example.org)'}
+    try:
+        response = requests.get(url, headers=headers)#, allow_redirects=True)
+        
+        #print(response.text)
+        if response.text == '':
+            print('response text empty')
+        else: 
+            print('response text not empty')
+        # Check if the status code is 200
+        if response.status_code == 200 and not "Diese Seite ist leider nicht verfügbar." in response.text and not "Etwas ist schiefgelaufen" in response.text and not "This page" in response.text:
+            pass
+            #return True
+        else:
+            pass
+            #return False
+        
+        print('response.status_code')
+        print(response.status_code)
+        
+        # Parse the HTML content
+        soup = BeautifulSoup(response.text, 'html.parser')
+        if soup.find(text="Diese Seite ist leider nicht verfügbar."):
+            print("The page might not exist or is unavailable.")
+        else:
+            print("The page exists or the content is not directly accessible.")
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error checking URL: {e}")
+        return False
+    
+
+# def download_posts(profilename):
+#     from load_insta import L2
+#     posts = instaloader.Profile.from_username(L2.context, profilename).get_posts()
+
+#     SINCE = datetime(2023, 10, 1)
+#     UNTIL = datetime(2024, 2, 8)
+
+#     i = 0
+#     #j = 0
+
+#     ##need to be logged in: 
+#     #Note: It stores it in a folder with the insta-profile-name of the person
+#     ##TODO: Limit the timeframe
+#     for post in posts:#takewhile(lambda p: p.date > UNTIL, dropwhile(lambda p: p.date > SINCE, posts)):
+#         print(post.date)
+#         print(str(i))
+#         #L.download_post(post, "instagram")
+#         L2.download_post(post, "heidiklum")
+#         if i == 10:
+#             break
+#         i += 1
+
+
 if __name__ == "__main__":
-    pass
+    #pass
+    
+    print('insta1:')
+    url = 'https://www.instagram.com/leomessi/'
+    print(check_insta_valid2(url))
+    print('insta2:')
+    url = 'https://www.instagram.com/adfasfi/'
+    print(check_insta_valid2(url))
+    print('insta3:')
+    url = 'https://www.instagram.com/heidiklum/'
+    print(check_insta_valid2(url))
+
+    print('-----------------')
+    print('insta1:')
+    url = 'https://www.instagram.com/leomessi/'
+    print(check_insta_valid_and_verified(url))
+    print('insta2:')
+    url = 'https://www.instagram.com/adfasfi/'
+    print(check_insta_valid_and_verified(url))
+    print('insta3:')
+    url = 'https://www.instagram.com/heidiklum/'
+    print(check_insta_valid_and_verified(url))
+
+    exit(0)
+
+    import pandas as pd
+    ##tests
+    json = """
+{
+  "relevantparts": [
+    {
+      "rank": 1,
+      "fact": "Guido Wolf ist ein deutscher Jurist und Politiker (CDU), geboren am 28. September 1961 in Weingarten, Landkreis Ravensburg."
+    },
+    {
+      "rank": 2,
+      "fact": "Er war von Mai 2016 bis Mai 2021 Minister für Justiz und Europaangelegenheiten im Kabinett Kretschmann II."
+    },
+    {
+      "rank": 3,
+      "fact": "Wolf war von 2015 bis 2016 Landtagsfraktionsvorsitzender der CDU Baden-Württemberg und somit Oppositionsführer sowie Spitzenkandidat der CDU für die Landtagswahl in Baden-Württemberg 2016."
+    },
+    {
+      "rank": 4,
+      "fact": "Er ist seit 2006 Mitglied des Landtages von Baden-Württemberg und war zuvor von 2003 bis 2011 Landrat des Landkreises Tuttlingen."
+    },
+    {
+      "rank": 5,
+      "fact": "Von 2011 bis 2015 war Wolf zudem Landtagspräsident von Baden-Württemberg."
+    },
+    {
+      "rank": 6,
+      "fact": "Wolf gehört der CDU an und bekleidet mehrere Parteiämter, unter anderem im Landesvorstand und im Kreisvorstand Tuttlingen."
+    },
+    {
+      "rank": 7,
+      "fact": "Seine politische Karriere begann er als Erster Bürgermeister in Nürtingen und anschließend als Landrat in Tuttlingen."
+    },
+    {
+      "rank": 8,
+      "fact": "Wolf hat sich als Vorsitzender des Interessenverbands Gäu-Neckar-Bodensee-Bahn engagiert und ist Präsident des Blasmusikverbandes Baden-Württemberg sowie des Landesverbands Baden-Württemberg des Volksbunds Deutsche Kriegsgräberfürsorge e.V."
+    },
+    {
+      "rank": 9,
+      "fact": "Er folgte in seinen politischen Positionen, wie bei der Debatte um Integration und Zuwanderung, oft den Vorschlägen seiner Parteikollegen, beispielsweise Julia Klöckner."
+    }
+  ]
+}
+"""
+
+    url = "https://de.wikipedia.org/wiki/Tom_Kaulitz"
+    title = "Tom Kaulitz"
+    print(get_image_url_backup(url, title))#, language='de'))
+    print(get_options_string('Chaos', language='de'))#Guido Wolf', language='de'))
+    
+    print(check_wiki_valid('https://de.wikipedia.org/wiki/Mike_Krauss'))
+    df = pd.read_csv('../../../Datasets/test_1.csv')
+    print(df.head())
+    for i in range(6, 7):#(5, 7):
+        print('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+        input_text = df['text'][i]
+        print(df['text'][i])
+        parsed_ents = get_all_wiki_urls(input_text)
+        print(parsed_ents)
+        context = input_text
+        for ent in parsed_ents.entities:
+            print('yyyyyyyyyyyyyyyyyyyyyyyyyy')
+            print(ent)
+            found = False
+            relevant_parts_to_show = None
+            num_iter = 0
+            while found == False and num_iter <= 2 and num_iter < len(ent.urls):
+                print('zzzzzzzzz')
+                print('Trial No. '+str(num_iter))
+                try:
+
+                    wiki_url = ent.urls[num_iter].url
+                    print('validity:')
+                    print(check_wiki_valid(wiki_url))
+                    valid_url = check_wiki_valid(wiki_url)
+
+                    if valid_url: 
+                        wiki_title = ent.urls[num_iter].title
+                        lang = ent.urls[num_iter].language
+                        wiki_line = f"""- [Wikipedia]({wiki_url}) - {wiki_title}"""
+                        print(wiki_line)
+                        try: 
+                            text = get_page_content(context, wiki_title, lang)
+                            #found = False
+                            #num_iter = 1
+                        #while not (found == True) and num_iter <= 3:
+                            try: 
+                                relevant_parts_to_show = get_relevant_parts(context, text[:8000], wiki_title)#translate_content(get_relevant_parts(context, text[:8000], wiki_title), 'en', 'de')
+                                print('rel parts:')
+                                print(relevant_parts_to_show)
+                                #relevant_parts_to_show = translate_content_new(relevant_parts_to_show, 'en', 'de')
+                                #print('relevant_parts_to_show after translation:')
+                                #print(relevant_parts_to_show)
+                                found = True
+                            except: 
+                                text = ''
+                                relevant_parts_to_show = None
+                                print('could not retrieve page - interim')
+                                #pass
+                            #num_iter += 1
+                        except:
+
+                            text = ''
+                            relevant_parts_to_show = None
+                            print('could not retrieve page')
+                    
+                
+                except: 
+                    print('something went wrong')
+                num_iter += 1
+
+            if not relevant_parts_to_show == None:
+                #print(relevant_parts_to_show)
+                for rp in relevant_parts_to_show.relevantparts:
+                    print(rp.fact)
+                    print('------')
+            print()
+        print('-------------------------------------------')
+
+
