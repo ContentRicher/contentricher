@@ -20,10 +20,26 @@ Click on the image to get to the video on Youtube.
 
 ## Running it
 
+### Docker image
+To run the app via docker, create a virtual environment with python==3.9.11 as the python version:  
+```conda create --name [PUT YOUR ENVIROMENT NAME HERE] python=3.9.11```  
+Activate the environment with: 
+```conda activate [PUT YOUR ENVIROMENT NAME HERE]```  
+Then, clone the repository: 
+```git clone https://github.com/ContentRicher/contentricher.git```  
+Change into the contentricher folder
+```cd contentricher```   
+Then, build and run the docker image: 
+```sudo docker build -t contentricher .```   
+```docker run -p 8501:8501 contentricher```   
+
+### Manual setup
 To run the app, create a virtual environment with python==3.9.11 as the python version:  
 ```conda create --name [PUT YOUR ENVIROMENT NAME HERE] python=3.9.11```  
 Activate the environment with: 
 ```conda activate [PUT YOUR ENVIROMENT NAME HERE]```  
+Clone the repository: 
+```git clone https://github.com/ContentRicher/contentricher.git```   
 Then change to the ./app folder  
 ```cd app/```  
 and install the libraries from the requirements.txt via:  
