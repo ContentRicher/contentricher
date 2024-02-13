@@ -15,7 +15,7 @@ It is a web- and AI-based system that detects relevant parts in given texts that
 
 **- Userfriendly Interface:** Based on Streamlit, it offers a browser-based interface, with intuitive controls and display of the results.
 
-![video](https://github.com/ContentRicher/contentricher/tree/main/video/ContentRicher_current.mov)
+![image](https://github.com/ContentRicher/contentricher/assets/9249319/2628c16d-3c75-48f6-9a19-698a83321b05)
 
 ## Running it
 
