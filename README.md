@@ -15,6 +15,7 @@ It is a web- and AI-based system that detects relevant parts in given texts that
 
 **- Userfriendly Interface:** Based on Streamlit, it offers a browser-based interface, with intuitive controls and display of the results.
 
+Click on the image to get to the video on Youtube.
 [![video](https://img.youtube.com/vi/CmhNdeESqKs/maxresdefault.jpg)](https://youtu.be/CmhNdeESqKs)
 
 ## Running it
