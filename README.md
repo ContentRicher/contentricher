@@ -29,9 +29,8 @@ Then, clone the repository:
 ```git clone https://github.com/ContentRicher/contentricher.git```  
 Change into the contentricher folder
 ```cd contentricher```   
-Then, build and run the docker image: 
-```sudo docker build -t contentricher .```   
-```docker run -p 8501:8501 contentricher```   
+Then, run the docker image with: 
+```sudo docker compose up```   
 
 ### Manual setup
 To run the app, create a virtual environment with python==3.9.11 as the python version:  
