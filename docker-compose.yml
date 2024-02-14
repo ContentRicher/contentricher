@@ -1,0 +1,10 @@
+version: '3.8'  # specify docker-compose version
+
+services:
+  contentricher:  # name of your service
+    build: .  # specifies build context directory
+    command: streamlit run ./app/experiments/frontend_experiments.py #runserver 0.0.0.0:8501  # command to start your application
+    volumes:
+      - .:/app  # mount volume
+    ports:
+      - "8501:8501"  # bind port
