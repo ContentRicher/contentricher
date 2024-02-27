@@ -27,9 +27,12 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, unquote 
 
 import instaloader
+from os.path import exists
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from itertools import dropwhile, takewhile
+
+from a615_import_firefox_session import import_session_from_firefox, username
 
 # set the folder name where images will be stored
 my_folder = "../img/"
@@ -45,6 +48,8 @@ base_url = 'https://en.wikipedia.org/wiki/'
 # (partial URL will be added to the end)
 query = 'http://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&titles='
 
+from load_insta import sessionfile, load_sessionfile, L2
+session_loaded = False
 
 load_dotenv()
 
@@ -56,7 +61,7 @@ mistral_model = "mistral-small"
 mistral_temperature = 0.15
 mistral_client = MistralClient(api_key=MISTRAL_API_KEY)
 
-chosen_model = 'Mistral Small'#'GPT-3.5'#'Mistral Small'#'GPT-3.5'#'Mistral Small'
+chosen_model = 'Mistral Small'#'GPT-3.5'
 
 if API_KEY != "[PUT YOUR OPENAI API KEY HERE]" and MISTRAL_API_KEY !="[PUT YOUR MISTRAL API KEY HERE]":
     options = ['Mistral Small', 'GPT-3.5']
@@ -132,12 +137,20 @@ class RelevantPartDe(BaseModel):
     rank: int = Field(description = "This is the rank of probability among all relevant parts suggestions.")
     fact: str = Field(description = "This is the relevant fact, an extracted fact or short paragraph from the entire text, in German.")
 
-class RelevantPartDe2(BaseModel):
-    rank: int = Field(description = "This is the rank of probability among all relevant parts suggestions.")
-    fact: str = Field(description = "Dies ist ein relevanter Fakt oder sehr kurzer Paragraph, auf deutsch.")
+# class RelevantPartDe2(BaseModel):
+#     rank: int = Field(description = "This is the rank of probability among all relevant parts suggestions.")
+#     fact: str = Field(description = "Dies ist ein relevanter Fakt oder sehr kurzer Paragraph, auf deutsch.")
     
 class RelevantPartsDe(BaseModel):
     relevantparts: List[RelevantPartDe]  
+
+class RelevantPartInsta(BaseModel):
+    rank: int = Field(description = "This is the rank of probability among all relevant parts suggestions.")
+    fact: str = Field(description = "This is the relevant fact, an extracted fact or short paragraph from the entire text.")
+    source_url: str = Field(description = "This is the url of the Instagram post the relevant fact is from.")
+
+class RelevantPartsInsta(BaseModel):
+    relevantparts: List[RelevantPartInsta]  
 
 class RankedEntry(BaseModel):
     rank: int = Field(description = "This is the rank of probability among all URL suggestions.")
@@ -238,7 +251,8 @@ def get_all_wiki_urls(context):
 
     system_intel = """You are an expert researcher and an expert in Wikipedia."""
     prompt = f"""Given the context {context}, find the distinct people mentioned and for each the most probable two Wikipedia pages for it.
-    Note: Wikipedia page urls are usually starting with 'https://de.wikipedia.org/wiki/' + Page Title for German pages and with 'https://en.wikipedia.org/wiki/' + Page Title for English pages.""" 
+    Note: Wikipedia page urls are usually starting with 'https://de.wikipedia.org/wiki/' + Page Title for German pages and with 'https://en.wikipedia.org/wiki/' + Page Title for English pages.
+    If only one person is found, only return one entity (with name and urls).""" 
 
     json_template = """{
     "entities": [ 
@@ -392,21 +406,28 @@ def get_options_string(title, language='de'):
 
 
 ##Catching disambiguation error, can be improved
+##TODO: e.g. for Alexei Nawalny, it didn't get the page content: https://en.wikipedia.org/wiki/Alexei_Navalny
 def get_page_content(context, title, language='de'):
+
+    res = ''
     try: 
         wikipedia.set_lang(language)
         p = wikipedia.page(title, auto_suggest=False, redirect=True, preload=False)
+        res = p.content
     except: 
-        
-        options_string = get_options_string(title, language)
-        best_entries = get_best_entry(context, options_string, title)
-        s = best_entries.rankedLinks[0].title
-        p = wikipedia.page(s)
+        try: 
+            options_string = get_options_string(title, language)
+            best_entries = get_best_entry(context, options_string, title)
+            s = best_entries.rankedLinks[0].title
+            p = wikipedia.page(s)
+            res = p.content
+        except: 
+            res = ''
 
-    return p.content
+    return res#p.content
 
 
-def get_relevant_parts(context, text, wiki_title, translate=True):
+def get_relevant_parts(context, text, wiki_title, translate=True, source_insta_posts=False):
     ##try getting most relevant part for the given context:
     ##maybe add target_group later:
     #target_group = 'Young adults'
@@ -445,13 +466,32 @@ def get_relevant_parts(context, text, wiki_title, translate=True):
   ]
 }"""
 
+    json_template_insta = """"relevantparts": [
+    {
+      "rank": 1,
+      "fact": "Sam Altman, CEO von OpenAI, wurde an einem Freitag unerwartet entlassen. Seitdem sind OpenAI und sein Hauptinvestor, Microsoft, in Aufruhr. Zwei Nachfolger, Mira Murati und Emmett Shear, übernahmen vorübergehend seinen Job. Nun wurde bestätigt, dass Sam Altman in seine Position zurückgekehrt ist."
+      "source_url": 'https://www.instagram.com/p/D2abx7e15Nv'
+    },
+    {
+      "rank": 2,
+      "fact": "Am 17. November 2023 beschloss der Vorstand von OpenAI, Sam Altman als CEO abzuberufen. Daraufhin reagierte eine große Anzahl von Mitarbeitern, was zu einer grundsätzlichen Einigung über Altmans Rückkehr als CEO führte."
+      "source_url": 'https://www.instagram.com/p/D3ayd3e12Au'
+    },
+    {
+      "rank": 3,
+      "fact": "Sam Altman war an verschiedenen Unternehmungen außerhalb von OpenAI beteiligt, u. a. war er für kurze Zeit CEO von Reddit, unterstützte die COVID-19-Forschung und investierte in Start-ups und Kernenergieunternehmen. Er hat sich auch in politischen Aktivitäten und Philanthropie engagiert."
+      "source_url": 'https://www.instagram.com/p/B4xac8c43Oq'
+    }
+  ]
+}"""
+
     if translate == True:
         translate_instruction = """Before returning the JSON, translate any 'fact' values in the json into grammatically correct German sentences, if they are not yet in German."""
     else:
         translate_instruction = ""
 
     system_intel = f"""You are an expert on {wiki_title} and great in explaining and understanding people."""# and {target_group}."""
-    prompt = f"""Given the context below, interpret the ARTICLE that follows it and then return only the sentences from the ARTICLE that contain relevant additional information/facts that are not present in the context
+    prompt = f"""Given the context below, interpret the ARTICLE that follows it and then return only the sentences from the ARTICLE that contain relevant additional information/facts that are not present in the context. 
 
     Context: 
     {context}
@@ -465,7 +505,8 @@ def get_relevant_parts(context, text, wiki_title, translate=True):
     ##Alternative prompt, was better
     prompt = f"""Your task is to make the article given below understandable to people who have not heard of {wiki_title} before.
     Given the article below, interpret the following information and then return only the sentences from the information text that contains relevant additional information that is not present in the article
-    and that may be relevant for people who do not know {wiki_title} and read the article.
+    and that may be relevant for people who do not know {wiki_title} and read the article. 
+    Do not return any facts from the context, unless a sentence from the information you select really needs it for further explanation or reference within the same sentence.
 
     Article: 
     {context}
@@ -476,15 +517,34 @@ def get_relevant_parts(context, text, wiki_title, translate=True):
     Group the selected relevant information in coherent chunks of information as short paragraphs. 
     """ 
 
+    if source_insta_posts == True:
+        prompt+=f"""
+        You received the information as a list of instagram posts, including the url of the source post (=where the information is taken from). 
+        Return the relevant part of each post as a coherent chunk in one relevantparts element, with a rank and a fact and the respective source_url."""
+    ##TODO: maybe say: only maximum n posts
+
+
     prompt+=f"""
     Return your answer in an ordered form, with the most relevant information parts first. 
 
-    Return your answer as plain JSON, following the following format below. {translate_instruction}
-    JSON format:
-    {json_template}
+    Return your answer as plain JSON, following the following format below. {translate_instruction}"""
 
-    JSON:
-    """
+    ##maybe add different template and add a different parsing later:
+    if source_insta_posts == False: 
+        prompt += f"""
+        JSON format:
+        {json_template}
+
+        JSON:
+        """
+    else: 
+        prompt += f"""
+        JSON format:
+        {json_template_insta}
+
+        JSON:
+        """
+
     ##later add to prompt:
     #    and that is relevant for the target group {target_group}.
 
@@ -496,11 +556,15 @@ def get_relevant_parts(context, text, wiki_title, translate=True):
 
 
     ##Parse results
-    if translate==True:
-        parsed = parse_results(res, pydantic_object=RelevantPartsDe, llm=model)
-    else: 
-        parsed = parse_results(res, pydantic_object=RelevantParts, llm=model)
+    if source_insta_posts == True:
+        parsed = parse_results(res, pydantic_object=RelevantPartsInsta, llm=model)
+    else:
+        if translate==True:
+            parsed = parse_results(res, pydantic_object=RelevantPartsDe, llm=model)
+        else: 
+            parsed = parse_results(res, pydantic_object=RelevantParts, llm=model)
 
+    #print(parsed)
     return parsed
 
 
@@ -641,7 +705,6 @@ def translate_content_new(parsed_input, lang_in, lang_out):
     Output list of Pydantic Objects:
     """
 
-
     res = ask_GPT(system_intel, prompt) ##TODO replace by langchain generic call (llm replaceable)
 
     return res
@@ -656,6 +719,7 @@ def concatenate_relevant_parts_to_show(relevant_parts_to_show):
         else:
             string_to_show += "\n\n" + rp.fact
     return string_to_show
+
 
 ## get JSON data w/ API and extract image URL
 def get_image_url(partial_url):
@@ -672,6 +736,7 @@ def get_image_url(partial_url):
 
         data = None
     return data
+
 
 def get_image_url_backup(url, title):
 
@@ -840,30 +905,66 @@ def extract_insta_username(insta_url):
     return dest_username
 
 
+def get_sessionfile_from_firefox():
+    #load_sessionfile(sessionfile)
+    ##Alternative to the above, getting session after a firefox insta login
+    session_directory = "../instaloader"
+    filename = "{}session-{}".format(session_directory, username)
+    import_session_from_firefox(cookiefile=None, sessionfile=filename, username=username)#f"{session_directory}/{filename}", username=username)
+    #import_session_from_firefox(None, username)
+    #print(cookiefile)
+    print(username)
+
+
+##TODO: Also try getting the sessionfile after firefox login, more flexible with regards to different users and no need to put password into .env
+def get_sessionfile():
+    print(sessionfile)
+    if not exists(sessionfile):
+        get_sessionfile_from_firefox()
+    else:
+        print('sessionfile exists')
+
+        ##NOTE TODO: I probably need to delete the sessionfile if it is > 24 hours old and create a new one
+        last_modified = check_sessionfile_date()
+        time_delta = datetime.now() - last_modified
+        print('age of sessionfile:')
+        print(time_delta)
+
+        # Calculate total hours
+        total_hours = time_delta.days * 24 + time_delta.seconds // 3600  # Use integer division for hours
+
+        # Check if greater than 24 hours
+        if total_hours > 24:
+            print('Sessionfile is more than 24h old, replacing it')
+            get_sessionfile_from_firefox()
+
+
 def check_insta_valid_and_verified(url):
     ##returning values for 'valid' and 'verified' insta profile
+    print('in check_insta')
+    print(sessionfile)
+    print(session_loaded)
 
-    L = instaloader.Instaloader()
+    get_sessionfile()
+    load_sessionfile(sessionfile)
 
-    #L.interactive_login(username)
-    #L.login(username, password)
     print(url)
 
     dest_username = extract_insta_username(url)
-    #print('dest_username:')
-    #print(dest_username)
 
     profile = None
 
     try:
-        profile = instaloader.Profile.from_username(L.context, dest_username)
+        #profile = instaloader.Profile.from_username(L2.context, dest_username)
         #get_insta_profile_infos(L, profile)
         try:
+            print('getting insta_verified status:')
             if get_insta_verified_status(dest_username) == True:#profile) == True:
                 return True, True
             else:
                 return True, False
         except: ##sometimes Insta Login not working, still return true for valid Insta_page:
+            print('in except')
             return True, False
     except instaloader.exceptions.LoginRequiredException:
         print("Login required to access this profile.")
@@ -881,13 +982,20 @@ def check_insta_valid_and_verified(url):
         profile = None
         return False, False
     
-# def get_insta_verified_status(dest_username):#profile):
-#     from load_insta import L2
-#     profile = instaloader.Profile.from_username(L2.context, dest_username)
-#     if profile.is_verified:
-#         return True
-#     else:
-#         return False
+def get_insta_verified_status(dest_username):#profile):
+
+    get_sessionfile()
+    load_sessionfile(sessionfile)
+    try: 
+        profile = instaloader.Profile.from_username(L2.context, dest_username)
+    except Exception as e:
+        print(f"The following error occurred: {e}")
+
+    profile = instaloader.Profile.from_username(L2.context, dest_username)
+    if profile.is_verified:
+        return True
+    else:
+        return False
 
 def get_insta_profile_infos(L, profile):
     #profile = instaloader.Profile.from_username(L.context, pro)
@@ -954,172 +1062,59 @@ def check_insta_valid2(url):
         return False
     
 
-# def download_posts(profilename):
-#     from load_insta import L2
-#     posts = instaloader.Profile.from_username(L2.context, profilename).get_posts()
+##TODO: also delete older posts, e.g. > 120 days old
+def download_posts(profilename, limit=5):
+    post_links = []
+    post_filepaths = []
 
-#     SINCE = datetime(2023, 10, 1)
-#     UNTIL = datetime(2024, 2, 8)
+    get_sessionfile()
+    load_sessionfile(sessionfile)
 
-#     i = 0
-#     #j = 0
+    posts = instaloader.Profile.from_username(L2.context, profilename).get_posts()
 
-#     ##need to be logged in: 
-#     #Note: It stores it in a folder with the insta-profile-name of the person
-#     ##TODO: Limit the timeframe
-#     for post in posts:#takewhile(lambda p: p.date > UNTIL, dropwhile(lambda p: p.date > SINCE, posts)):
-#         print(post.date)
-#         print(str(i))
-#         #L.download_post(post, "instagram")
-#         L2.download_post(post, "heidiklum")
-#         if i == 10:
-#             break
-#         i += 1
+    SINCE = datetime.now()- timedelta(days=60)#(2023, 10, 1)
+    UNTIL = datetime.now()#(2024, 2, 8)
+    print('from - to:')
+    print(SINCE)
+    print(UNTIL)
+
+    i = 1
+    #j = 0
+
+    ##need to be logged in: 
+    #Note: It stores it in a folder with the insta-profile-name of the person
+    ##TODO: Limit the timeframe
+    for post in posts:#takewhile(lambda p: p.date > UNTIL, dropwhile(lambda p: p.date > SINCE, posts)):
+        #print(post.date)
+        #print(str(i))
+        L2.download_post(post, profilename)
+        #post_links.append(post.url) ##image link
+        post_links.append("https://www.instagram.com/p/"+post.shortcode) ## = post link
+        filename = './' + profilename + '/' + L2.format_filename(post, target=profilename)
+        post_filepaths.append(filename)
+        if i == limit:
+            break
+        i += 1
+    return post_links, post_filepaths
+
+
+def check_sessionfile_date():
+    # Specify the file path
+    session_directory = "../instaloader/" ##TODO: specify it 1x only
+    file_path = "{}session-{}".format(session_directory, username)
+    print('file_path:')
+    print(file_path)
+
+    # Get the creation and modification datetime of the file
+    stat_info = os.stat(file_path)
+    creation_time = datetime.fromtimestamp(stat_info.st_ctime)
+    modification_time = datetime.fromtimestamp(stat_info.st_mtime)
+
+    # Print the datetime information
+    print(f"Creation datetime: {creation_time}")
+    print(f"Modification datetime: {modification_time}")
+    return modification_time
 
 
 if __name__ == "__main__":
-    #pass
-    
-    print('insta1:')
-    url = 'https://www.instagram.com/leomessi/'
-    print(check_insta_valid2(url))
-    print('insta2:')
-    url = 'https://www.instagram.com/adfasfi/'
-    print(check_insta_valid2(url))
-    print('insta3:')
-    url = 'https://www.instagram.com/heidiklum/'
-    print(check_insta_valid2(url))
-
-    print('-----------------')
-    print('insta1:')
-    url = 'https://www.instagram.com/leomessi/'
-    print(check_insta_valid_and_verified(url))
-    print('insta2:')
-    url = 'https://www.instagram.com/adfasfi/'
-    print(check_insta_valid_and_verified(url))
-    print('insta3:')
-    url = 'https://www.instagram.com/heidiklum/'
-    print(check_insta_valid_and_verified(url))
-
-    exit(0)
-
-    import pandas as pd
-    ##tests
-    json = """
-{
-  "relevantparts": [
-    {
-      "rank": 1,
-      "fact": "Guido Wolf ist ein deutscher Jurist und Politiker (CDU), geboren am 28. September 1961 in Weingarten, Landkreis Ravensburg."
-    },
-    {
-      "rank": 2,
-      "fact": "Er war von Mai 2016 bis Mai 2021 Minister für Justiz und Europaangelegenheiten im Kabinett Kretschmann II."
-    },
-    {
-      "rank": 3,
-      "fact": "Wolf war von 2015 bis 2016 Landtagsfraktionsvorsitzender der CDU Baden-Württemberg und somit Oppositionsführer sowie Spitzenkandidat der CDU für die Landtagswahl in Baden-Württemberg 2016."
-    },
-    {
-      "rank": 4,
-      "fact": "Er ist seit 2006 Mitglied des Landtages von Baden-Württemberg und war zuvor von 2003 bis 2011 Landrat des Landkreises Tuttlingen."
-    },
-    {
-      "rank": 5,
-      "fact": "Von 2011 bis 2015 war Wolf zudem Landtagspräsident von Baden-Württemberg."
-    },
-    {
-      "rank": 6,
-      "fact": "Wolf gehört der CDU an und bekleidet mehrere Parteiämter, unter anderem im Landesvorstand und im Kreisvorstand Tuttlingen."
-    },
-    {
-      "rank": 7,
-      "fact": "Seine politische Karriere begann er als Erster Bürgermeister in Nürtingen und anschließend als Landrat in Tuttlingen."
-    },
-    {
-      "rank": 8,
-      "fact": "Wolf hat sich als Vorsitzender des Interessenverbands Gäu-Neckar-Bodensee-Bahn engagiert und ist Präsident des Blasmusikverbandes Baden-Württemberg sowie des Landesverbands Baden-Württemberg des Volksbunds Deutsche Kriegsgräberfürsorge e.V."
-    },
-    {
-      "rank": 9,
-      "fact": "Er folgte in seinen politischen Positionen, wie bei der Debatte um Integration und Zuwanderung, oft den Vorschlägen seiner Parteikollegen, beispielsweise Julia Klöckner."
-    }
-  ]
-}
-"""
-
-    url = "https://de.wikipedia.org/wiki/Tom_Kaulitz"
-    title = "Tom Kaulitz"
-    print(get_image_url_backup(url, title))#, language='de'))
-    print(get_options_string('Chaos', language='de'))#Guido Wolf', language='de'))
-    
-    print(check_wiki_valid('https://de.wikipedia.org/wiki/Mike_Krauss'))
-    df = pd.read_csv('../../../Datasets/test_1.csv')
-    print(df.head())
-    for i in range(6, 7):#(5, 7):
-        print('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
-        input_text = df['text'][i]
-        print(df['text'][i])
-        parsed_ents = get_all_wiki_urls(input_text)
-        print(parsed_ents)
-        context = input_text
-        for ent in parsed_ents.entities:
-            print('yyyyyyyyyyyyyyyyyyyyyyyyyy')
-            print(ent)
-            found = False
-            relevant_parts_to_show = None
-            num_iter = 0
-            while found == False and num_iter <= 2 and num_iter < len(ent.urls):
-                print('zzzzzzzzz')
-                print('Trial No. '+str(num_iter))
-                try:
-
-                    wiki_url = ent.urls[num_iter].url
-                    print('validity:')
-                    print(check_wiki_valid(wiki_url))
-                    valid_url = check_wiki_valid(wiki_url)
-
-                    if valid_url: 
-                        wiki_title = ent.urls[num_iter].title
-                        lang = ent.urls[num_iter].language
-                        wiki_line = f"""- [Wikipedia]({wiki_url}) - {wiki_title}"""
-                        print(wiki_line)
-                        try: 
-                            text = get_page_content(context, wiki_title, lang)
-                            #found = False
-                            #num_iter = 1
-                        #while not (found == True) and num_iter <= 3:
-                            try: 
-                                relevant_parts_to_show = get_relevant_parts(context, text[:8000], wiki_title)#translate_content(get_relevant_parts(context, text[:8000], wiki_title), 'en', 'de')
-                                print('rel parts:')
-                                print(relevant_parts_to_show)
-                                #relevant_parts_to_show = translate_content_new(relevant_parts_to_show, 'en', 'de')
-                                #print('relevant_parts_to_show after translation:')
-                                #print(relevant_parts_to_show)
-                                found = True
-                            except: 
-                                text = ''
-                                relevant_parts_to_show = None
-                                print('could not retrieve page - interim')
-                                #pass
-                            #num_iter += 1
-                        except:
-
-                            text = ''
-                            relevant_parts_to_show = None
-                            print('could not retrieve page')
-                    
-                
-                except: 
-                    print('something went wrong')
-                num_iter += 1
-
-            if not relevant_parts_to_show == None:
-                #print(relevant_parts_to_show)
-                for rp in relevant_parts_to_show.relevantparts:
-                    print(rp.fact)
-                    print('------')
-            print()
-        print('-------------------------------------------')
-
-
+    pass
