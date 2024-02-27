@@ -46,14 +46,17 @@ and install the libraries from the requirements.txt via:
 Change into the experiments folder  
 ```cd experiments/```  
 Then, open the .env file in the experiments folder. You may need to press ```CMD + SHIFT + .``` to show the file.  Insert your key/s in the placeholders
-```API_KEY = "[YOUR OPENAI API KEY HERE]"``` (for using GPT-3.5 from OpenAI) and/or put   
-```MISTRAL_API_KEY = "[YOUR MISTRAL_API KEY HERE]"``` (for using the Mistral Small Model).  
+```API_KEY = "[PUT YOUR OPENAI API KEY HERE]"``` (for using GPT-3.5 from OpenAI) and/or put   
+```MISTRAL_API_KEY = "[PUT YOUR MISTRAL_API KEY HERE]"``` (for using the Mistral Small Model).
+To run the analysis of the latest Instagram Posts of people mentioned in the text, you need to add your Instagram username.
+```INSTA_USERNAME = "[PUT YOUR INSTAGRAM USERNAME HERE]"```   
+You may put your password or, if you do not provide it, you will need to log in to your Instagram account on Firefox before using ContentRicher.
 Finally, run the app from the experiments folder with:  
 ```streamlit run frontend_experiments.py```
 
 ## Current state of development
 
-Currently, we retrieve information from Wikipedia. The next step will be to include information from Instagram (both from text and images).
+Currently, we retrieve information from Wikipedia and we include information from the latest Instagram posts of the identified persons (both from text and images).
   
 ## 📘 License
 
