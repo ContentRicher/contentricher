@@ -51,6 +51,7 @@ Then, open the .env file in the experiments folder. You may need to press ```CMD
 To run the analysis of the latest Instagram Posts of people mentioned in the text, you need to add your Instagram username.   
 ```INSTA_USERNAME = "[PUT YOUR INSTAGRAM USERNAME HERE]"```   
 You may put your password or, if you do not provide it, you will need to log in to your Instagram account on Firefox before using ContentRicher.
+Disclaimer: Make sure you read the current Instagram / Meta terms of use and only use this feature if it agrees with them.
 Finally, run the app from the experiments folder with:  
 ```streamlit run frontend_experiments.py```
 
