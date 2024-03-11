@@ -89,7 +89,7 @@ def get_gpt4_new(system_intel, prompt, temperature=0.7):
     return res
 
 
-def get_infos_from_insta_posts(insta_name, person_name, post_links, post_filepaths):
+def get_infos_from_insta_posts(insta_name, person_name, post_links, post_filepaths, include_source=False):
     txt_files = get_txt_files('./'+insta_name)#'./heidiklum')
     txt_files.sort(reverse=True)
     #print(txt_files[:2])
@@ -107,6 +107,7 @@ def get_infos_from_insta_posts(insta_name, person_name, post_links, post_filepat
         except:
             post_link = ''
         ##TODO: handle passing over of post_link
+        all_res += "Source post:"+ post_link+"\n"
 
         text_object = open(txt_filename,"r")
         insta_text = text_object.read()
@@ -131,6 +132,7 @@ def get_infos_from_insta_posts(insta_name, person_name, post_links, post_filepat
         prompt = f"""You are given the description of one or several images for an instagram post, a text for the post/s, and the name of the person as
         well as the Instagram Profile name of the person who posted it. Make sense of it and provide your insights as a text for a journalist who would like to include the information in an article.
         Provide your answer in German and use a rather factual 'news'-style tone.
+        Do not invent anything, do not generalize your findings, only describe what you see in the image and use the information provided on whom you see.
 
         description of image: 
         {image_description}
@@ -154,4 +156,64 @@ def get_infos_from_insta_posts(insta_name, person_name, post_links, post_filepat
 
 
 if __name__ == "__main__":
-    pass
+    #pass
+    print(get_infos_from_insta_posts("heidiklum", "Heidi Klum"))
+
+    ##TODO: delete old posts (in cron job?)
+
+    # txt_files = get_txt_files('./heidiklum')
+    # txt_files.sort()
+    # print(txt_files[:2])
+    # for txt_filename in txt_files:
+    #     txt_filename_timestamp_text = txt_filename[:len(txt_filename)-4]
+    #     print(txt_filename_timestamp_text)
+    #     text_object = open(txt_filename,"r")
+    #     insta_text = text_object.read()
+    #     print(insta_text)
+
+    #     jpg_files = get_jpg_files(txt_filename_timestamp_text)#('./heidiklum')
+    #     jpg_files.sort()
+    #     print(jpg_files)
+
+    #     image_texts = []
+    #     for jpg_filename in jpg_files:
+    #         if jpg_filename.startswith(txt_filename_timestamp_text):
+    #             print(jpg_filename)
+    #             encoded_image = encode_image(jpg_filename)
+    #             answer = get_vision_response(base64_image=encoded_image, prompt=prompt_sv)
+    #             print(answer)
+    #             image_texts.append(answer)
+    #     print('---------')
+    #     image_description = str(image_texts)
+
+    #     system_intel = """You are a helpful assistant."""
+    #     prompt = f"""You are given the description of one or several images for an instagram post, a text for the post/s, and the name of the person as
+    #     well as the Instagram Profile name of the person who posted it. Make sense of it and provide your insights as a text for a journalist who would like to include the information in an article.
+    #     Provide your answer in German and use a rather factual 'news'-style tone.
+
+    #     description of image: 
+    #     {image_description}
+
+    #     text: 
+    #     {insta_text}
+
+    #     person name: 
+    #     Heidi Klum
+
+    #     profile name: 
+    #     @heidiklum
+    #     """
+    #     print(prompt)
+
+    #     ##TODO: replace with GPT-3.5 and Mistral calls, put them in a separate file
+    #     res = get_gpt4_new(system_intel, prompt)
+    #     print(res)
+    #     print('ooooooooooooooooooooooooooooooo')
+
+    # # Path to your image
+    # #image_path = "./heidiklum/2024-02-15_02-05-27_UTC_1.jpg"#"./heidiklum/2024-02-13_14-33-37_UTC.jpg"#"meditating_cats.png"#"/content/meditating_cats.png"
+    # for image_path in jpg_files:
+    #     # Getting the base64 string
+    #     encoded_image = encode_image(image_path)
+    #     answer = get_vision_response(base64_image=encoded_image, prompt=prompt_sv)
+    #     print(answer)

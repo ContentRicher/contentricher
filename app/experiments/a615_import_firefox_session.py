@@ -86,16 +86,7 @@ def import_session_from_firefox(cookiefile=None, sessionfile=None, username=None
         #return False
 
 if __name__ == "__main__":
-    # p = ArgumentParser()
-    # p.add_argument("-c", "--cookiefile")
-    # p.add_argument("-f", "--sessionfile")
-    # args = p.parse_args()
-    # try:
-    #     import_session(args.cookiefile or get_cookiefile(), args.sessionfile)
-    # except (ConnectionException, OperationalError) as e:
-    #     raise SystemExit("Cookie import failed: {}".format(e))
 
-    #import_session_from_firefox()
     session_directory = "../instaloader/"
     username = username#'email@email.com'
     filename = "{}session-{}".format(session_directory, username)

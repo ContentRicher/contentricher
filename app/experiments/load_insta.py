@@ -33,6 +33,4 @@ def load_sessionfile(sessionfile):
     return True
 
 if __name__ == "__main__":
-    print('hello')
-    load_sessionfile(sessionfile)
-    #pass
+    pass

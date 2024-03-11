@@ -1,5 +1,6 @@
 import streamlit as st
 import wiki_functions as wf
+from wiki_functions import options, chosen_model
 import vision_functions as vf
 
 import langchain_core
@@ -89,10 +90,18 @@ if "check_insta" not in st.session_state:
 
 if "wiki_lines" not in st.session_state:
     st.session_state.wiki_lines = None
+
+if "wiki_lines_langs" not in st.session_state:
+    st.session_state.wiki_lines_langs = None
     
 if "insta_lines" not in st.session_state:
     st.session_state.insta_lines = None
 
+if "person_sought" not in st.session_state:
+    st.session_state.person_sought = None
+
+if "integrated_text" not in st.session_state:
+    st.session_state.integrated_text = None
 
 def set_clicked():
     st.session_state.clicked = True
@@ -101,7 +110,8 @@ def set_relevant_parts_to_show(context, wiki_title, language='de', translate=Tru
     print('in set_relevant_parts_to_show')
     try:
         text = wf.get_page_content(context, wiki_title, language)
-        st.session_state.relevant_parts_to_show = wf.get_relevant_parts(context, text[:8000], wiki_title, translate)#wf.translate_content(wf.get_relevant_parts(context, text[:8000], wiki_title), 'en', 'de')
+        if len(text) > 0:
+            st.session_state.relevant_parts_to_show = wf.get_relevant_parts(context, text[:8000], wiki_title, translate, chosen_model=st.session_state.model)#wf.translate_content(wf.get_relevant_parts(context, text[:8000], wiki_title), 'en', 'de')
     except:
         text = ''
         st.session_state.relevant_parts_to_show = None
@@ -109,12 +119,12 @@ def set_relevant_parts_to_show(context, wiki_title, language='de', translate=Tru
     st.session_state.clicked = True
     st.session_state.isall = False
 
-
 def set_relevant_parts_to_show_insta(context, insta_name, person_name, post_links, post_filepaths, language='de', translate=True):
     try:
         st.session_state.relevant_parts_to_show_insta = None ##initialize to none
-        text = vf.get_infos_from_insta_posts(insta_name, person_name, post_links, post_filepaths)
-        st.session_state.relevant_parts_to_show_insta = wf.get_relevant_parts(context, text[:8000], person_name, translate)
+        text = vf.get_infos_from_insta_posts(insta_name, person_name, post_links, post_filepaths, include_source=True)
+        if len(text) > 0:
+            st.session_state.relevant_parts_to_show_insta = wf.get_relevant_parts(context, text[:8000], person_name, translate, source_insta_posts=True, chosen_model=st.session_state.model)
     except:
         text = ''
         st.session_state.relevant_parts_to_show_insta = None
@@ -139,10 +149,10 @@ def insta_callback():
         st.session_state.include_insta = False
     ##tmp for debugging:
     #st.session_state.include_insta = True
-
+        
 def get_wiki_line(ent):
     st.session_state.found_a_wiki_entry = False
-    #lang = 'de'
+    lang = None
     ##starting from the first entry, check if URL valid, else try the next ones
     num_iter = 0            
     while st.session_state.found_a_wiki_entry == False and num_iter <= 2 and num_iter < len(ent.urls):
@@ -166,9 +176,10 @@ def get_wiki_line(ent):
             wiki_line = f"""- Kein Eintrag auf Wikipedia gefunden."""
 
         num_iter += 1
-    return wiki_line
+    return wiki_line, lang
 
-def get_insta_line(ent):
+
+def get_insta_line(instaent):
     st.session_state.found_a_insta_entry = False
     #lang = 'de'
     ##for now, taking the first entry, TODO: check if URL valid, else probably also the rest is not existing
@@ -176,11 +187,11 @@ def get_insta_line(ent):
 
 
     while st.session_state.found_a_insta_entry == False and num_iter <= 2 and num_iter < len(ent.urls):
-        insta_line = f"""- Kein Eintrag auf Instagram MM gefunden."""
+        insta_line = f"""- Kein Eintrag auf Instagram gefunden."""
         insta_url = ""
         try:
-            insta_url = ent.urls[num_iter].url
-            #insta_title = ent.urls[num_iter].title
+            insta_url = instaent.urls[num_iter].url
+            #insta_title = instaent.urls[num_iter].title
 
             ##TODO: ensure Insta session works or else try a different method to check validity or show anyways
             #st.session_state.found_a_insta_entry = True##TODO: find the right call to longer version of: wf.check_insta_valid(insta_url)
@@ -201,10 +212,10 @@ def get_insta_line(ent):
             ##if checking is desired, return only if also verified
             if st.session_state.check_insta and insta_valid and insta_verified: 
                 st.session_state.found_a_insta_entry = True
-            elif st.session_state.check_insta and (num_iter == 2 or num_iter == len(ent.urls)): ##= we tried all suggestions, none was verified
+            elif st.session_state.check_insta and (num_iter == 2 or num_iter == len(instaent.urls)): ##= we tried all suggestions, none was verified
                 ##if already all options were checked and none was verified, then return the first entry suggested, just do not declare it as verified
                 ##TODO: ideally check also validity of entry
-                insta_url = ent.urls[0].url
+                insta_url = instaent.urls[0].url
                 insta_username = wf.extract_insta_username(insta_url)
                 return f"""- [Instagram]({insta_url}) - {insta_username}""", insta_url
             else: 
@@ -215,9 +226,9 @@ def get_insta_line(ent):
             ##only if url is valid:
             if st.session_state.found_a_insta_entry: 
                 if not (insta_valid == None) and insta_valid == True:
-                    #insta_title = ent.urls[num_iter].title
+                    #insta_title = instaent.urls[num_iter].title
                     insta_username = wf.extract_insta_username(insta_url)
-                    #lang = ent.urls[num_iter].language
+                    #lang = instaent.urls[num_iter].language
                     #insta_line = f"""- [Instagram]({insta_url}) - {insta_title}"""
                     if not (insta_verified == None) and insta_verified == True:
                         insta_line = f"""- [Instagram]({insta_url}) - {insta_username} :white_check_mark:"""
@@ -227,7 +238,7 @@ def get_insta_line(ent):
                 else:
                     print('insta url not valid')
                     insta_url = ''
-                    insta_title = ''
+                    #insta_title = ''
                     insta_line = f"""- Kein Eintrag auf Instagram gefunden."""                      
             #else: 
             #    insta_line = f"""- Kein Eintrag auf Instagram gefunden."""
@@ -240,29 +251,49 @@ def get_insta_line(ent):
         num_iter += 1
     return insta_line, insta_url, insta_username
 
+def remember_params(type, wiki_title, insta_username, person_name, post_links, post_filepaths):
+    st.session_state.person_sought = dict()
+    st.session_state.person_sought["type"] = type ##wiki or insta
+    st.session_state.person_sought["wiki_title"] = wiki_title
+    st.session_state.person_sought["insta_username"] = insta_username
+    st.session_state.person_sought["person_name"] = person_name
+    st.session_state.person_sought["post_links"] = post_links
+    st.session_state.person_sought["post_filepaths"] = post_filepaths
+
+
+def recalc_images():
+    with col1:                     
+        st.write(f"{person_name}")
+        if person_name == 'Heidi Klums': ##tmp only, to replace with retrieved image
+            st.image("../img/Heidi_Klum_by_Glenn_Francis.jpg", width=100)#, caption=person_name)
+        else:
+            #st.image(create_dummy_image(), width=100, caption=person_name)
+            try: 
+                st.image(st.session_state.wiki_images[i], width = 100)#, caption=person_name)
+            except: ##e.g. no image found before
+                st.image(create_dummy_image(), width=100)#, caption=person_name)
+
+tiles_left = []
+tiles_middle = []
+tiles_right = []
+tiles = []
 
 st.set_page_config(page_title='MTLab WIP', layout="wide")#, initial_sidebar_state="expanded")#"collapsed")
 # Set up the sidebar with links and a search bar
 st.sidebar.title('Navigation')
 st.sidebar.write('Informationen zu Personen')
 
-if ('GPT-3.5' in wf.options) and ('Mistral Small' in wf.options):
-    st.session_state.model = st.sidebar.selectbox(
-        'Wahl des Sprachmodells',
-        ('Mistral Small', 'GPT-3.5'))
-elif 'GPT-3.5' in wf.options:
-    st.session_state.model = st.sidebar.selectbox(
-    'Wahl des Sprachmodells',
-    ('GPT-3.5', 'Key für Mistral fehlt'))
-elif 'Mistral Small' in wf.options:
-    st.session_state.model = st.sidebar.selectbox(
-    'Wahl des Sprachmodells',
-    ('Mistral Small', 'Key für GPT-3.5 fehlt'))
-else: 
-    st.session_state.model = None
-    ##deactivate buttons:
+##TODO: Handle missing keys
+if len(wf.options) == 0:
     st.session_state.button_find_disabled = True
+else:
+    st.session_state.model = st.sidebar.selectbox('Wahl des Sprachmodells', options = wf.options)
+
+##not working to hand it over
 wf.chosen_model = st.session_state.model
+chosen_model = st.session_state.model
+#st.markdown(wf.chosen_model)
+wf.set_model(st.session_state.model)
 
 #st.sidebar.write('Login')
 #st.sidebar.write('Weitere Links...')
@@ -279,8 +310,11 @@ my_folder = "../img/"#'wiki_images'#wf.my_folderwf.my_folder
 # Middle column for the article input and identified persons
 with middle_column:
     st.title('Artikel und Personen')
+    
+    tab1, tab2, tab3 = st.tabs(["Input", "Output", "Output mit hervorgehobenen Änderungen"])
 
-    article_text = st.text_area("Artikel Text", height=400, value = st.session_state.user_input)
+    with tab1: 
+        article_text = st.text_area("Artikel Text", height=400, value = st.session_state.user_input)
 
     if st.session_state.button_find_disabled == True: ##Button disabled
         st.markdown('No Key found. Please insert your key in the .env file.')
@@ -302,20 +336,23 @@ with middle_column:
             st.session_state.find_person_clicked = True
             st.session_state.clicked = False ##reset, not showing elements that have nothing to do with new selection
             st.session_state.user_input = article_text ##TODO check if it always gets the current text
-            st.session_state.parsed_ents = wf.get_all_wiki_urls(st.session_state.user_input)
+            print('chosen_model when calling get_all_wiki_urls:')
+            print(chosen_model)
+            st.session_state.parsed_ents = wf.get_all_wiki_urls(st.session_state.user_input, chosen_model=st.session_state.model)
             st.session_state.parsed_instas = dict()
 
             people = dict()
             people = st.session_state.parsed_ents.entities
             st.session_state.wiki_images = dict()
             st.session_state.wiki_lines = dict()
+            st.session_state.wiki_lines_langs = dict()
             st.session_state.insta_lines = dict()
 
-
             for i in range(len(people)):
+                #st.markdown('i')
                 ent = people[i]
 
-                st.session_state.wiki_lines[i] = get_wiki_line(ent)
+                st.session_state.wiki_lines[i], st.session_state.wiki_lines_langs[i] = get_wiki_line(ent)
                 print(st.session_state.wiki_lines[i])
 
                 person_name = ent.name
@@ -359,7 +396,7 @@ with middle_column:
 
                     if st.session_state.include_insta == True:
                         
-                        insta_ent = wf.get_insta_urls(wiki_title, st.session_state.user_input)                        
+                        insta_ent = wf.get_insta_urls(wiki_title, st.session_state.user_input, chosen_model=st.session_state.model)                        
                         try:
                             st.session_state.parsed_instas[i] = insta_ent
                         except:
@@ -378,6 +415,7 @@ with middle_column:
 
         parsed_ents = st.session_state.parsed_ents
 
+        #with st.form(key='columns_in_form'):
         # Rows for identified persons and related articles
         col1, col2, col3 = st.columns([1, 2, 1])
 
@@ -394,162 +432,255 @@ with middle_column:
         with col2b:
             st.write(f"**Informationsquellen**")
         with col3b: 
-            st.write(f"**Aktion**")
+            st.write(f"**Hole Infos**")
 
+        #with st.form(key='column_people', border=False):
+        col1y, col2y, col3y = st.columns([1, 2, 1])
+        if 1 == 1:
 
-        for i in range(len(people)):
+            tiles = []
+            tiles_left = []
+            tiles_middle = []
+            tiles_right = []
+            for i in range(len(people)):
+                col1y, col2y, col3y = st.columns([1, 2, 1])
+                with col2y:
+                    tile = st.container(border=False)#True)
+                    tiles.append(tile)
+                    tiles_middle.append(tile)
 
-            ent = people[i]
+                with col1y: 
+                    tile = st.container(border=False)#True)
+                    tiles_left.append(tile)
+                with col3y: 
+                    tile = st.container(border=False)#True)
+                    tiles_right.append(tile)
 
-            person_name = ent.name
+            ##delete original large-size images
+            for file in os.listdir(my_folder): 
+                if file.endswith('.jpg') and not file.endswith('_sm.jpg'):
+                    file = os.path.join(my_folder, file)
+                    os.remove(file)
 
-            col1, col2, col3 = st.columns([1, 2, 1])
+            st.session_state.found_ents = True
 
-            ##st.session_state.relevant_parts_to_show = None
-            #st.session_state.found_a_wiki_entry = False
-            lang = 'de'
-        
+            # Button below the text area
+            #if st.button('Artikel speichern'):
+            #    st.success('Artikel gespeichert.')
 
-            # Right column for articles related to the person
-            with col2:
+i = 0
+for t in tiles_left: 
+    with t:
+        ent = people[i]
+        person_name = ent.name
+        st.write(f"""{person_name}""")
+        try: 
+            st.image(st.session_state.wiki_images[i], width = 100)#, caption=person_name)
+        except: ##e.g. no image found before
+            st.image(create_dummy_image(), width=100)#, caption=person_name)
+    i += 1
 
-                wiki_line = st.session_state.wiki_lines[i]
+i = 0
+for tile in tiles_middle: 
 
-                ##no matter whether it turned out to exist or not, take the title received as most probable wikipedia title
-                wiki_title = ent.urls[0].title
+    with tile: 
+        instas = st.session_state.parsed_instas
+        try:
+            insta_ent = instas[i]
+            insta_line, insta_url, insta_username = get_insta_line(insta_ent)
+        except:
+            insta_line = """"""
+        wiki_line = st.session_state.wiki_lines[i]
+        st.markdown(f"""{wiki_line}
+        """)
+        st.markdown(f"""{insta_line}
+        """)
+    i += 1
 
-                if st.session_state.include_insta == True:
+i = 0
+for t in tiles_right: 
+    with t:
+        ##TODO: Show button only if url is valid and displayed
+        ent = people[i]
+        wiki_title = ent.urls[0].title
+        person_name = ent.name
+        if st.button(f"Analysiere Wikipedia", key = "buttonyy"+str(i), on_click = sel_callback):
+            ##reset:
+            st.session_state.relevant_parts_to_show = None
+            st.session_state.relevant_parts_to_show_insta = None
+            lang = st.session_state.wiki_lines_langs[i]
+            set_relevant_parts_to_show(context, wiki_title, lang, True)
 
-                    if not (wiki_title == '' or wiki_title == None):
+        verified = False
+        try:
+            insta_ent = instas[i]
+            insta_line, insta_url, insta_username = get_insta_line(insta_ent)
+            if ":white_check_mark:" in insta_line: ##verified
+                verified = True
+        except: 
+            pass
+        if verified: ##only for verified Instagram sites
+            if st.button(f"Analysiere Instagram", key = "buttonyy"+str(i)+"b"):
+                try:
+                    ##reset:
+                    st.session_state.relevant_parts_to_show = None
+                    st.session_state.relevant_parts_to_show_insta = None
+                    #insta_ent = instas[i]
+                    #insta_line, insta_url, insta_username = get_insta_line(insta_ent)
+                    ##downloading posts to a folder named like the insta username
+                    post_links, post_filepaths = wf.download_posts(insta_username, limit=3)#5)
+                    #print(post_links)
+                    #print(post_filepaths)
+                    set_relevant_parts_to_show_insta(context, insta_username, person_name, post_links, post_filepaths, language='de', translate=True)
+                except:
+                    print("downloading of instaposts did not work")
+    i += 1
 
-                        instas = dict()
-                        instas = st.session_state.parsed_instas
-                        insta_url = None
-
-                        try:
-
-                            insta_ent = instas[i]
-                            insta_line, insta_url, insta_username = get_insta_line(insta_ent)
-                            print(insta_url)
-
-                        except: 
-                            print('in except for insta url')
-                            insta_url = ''
-                            insta_title = ''
-                            insta_line = f"""- Kein Eintrag auf Instagram gefunden."""
-                            insta_username = ''
-
-
-                    else:
-                        insta_line = f""""""#- Instagram Eintrag - TODO"""
-                        
-                else:
-                    insta_line = f""""""#- Instagram Eintrag - TODO"""
-
-                st.markdown(f"""
-                """+ wiki_line +"""
-                """+ insta_line + """
-                """)
-
-            # Left column for face image
-            with col1:                     
-                st.write(f"{person_name}")
-                if person_name == 'Heidi Klums': ##tmp only, to replace with retrieved image
-                    st.image("../img/Heidi_Klum_by_Glenn_Francis.jpg", width=100)#, caption=person_name)
-                else:
-                    #st.image(create_dummy_image(), width=100, caption=person_name)
-                    try: 
-                        st.image(st.session_state.wiki_images[i], width = 100)#, caption=person_name)
-                    except: ##e.g. no image found before
-                        st.image(create_dummy_image(), width=100)#, caption=person_name)
-
-            if st.session_state.found_a_wiki_entry:
-                with col3:
-                    ##TODO: Show button only if url is valid and displayed
-                    #st.write(f"Aktion")
-                    if st.button(f"Relevante Auszüge", key = "button"+str(i), on_click = sel_callback):
-                        set_relevant_parts_to_show(context, wiki_title, lang, True)
-                    if st.button(f"Analysiere Instagram", key = "button"+str(i)+"b"):
-                        try:
-                            ##downloading posts to a folder named like the insta username
-                            post_links, post_filepaths = wf.download_posts(insta_username, limit=3)#5)
-                            #print(post_links)
-                            #print(post_filepaths)
-                            set_relevant_parts_to_show_insta(context, insta_username, person_name, post_links, post_filepaths, language='de', translate=True)
-                        except:
-                            print("downloading of instaposts did not work")
-
-        ##delete original large-size images
-        for file in os.listdir(my_folder): 
-            if file.endswith('.jpg') and not file.endswith('_sm.jpg'):
-                file = os.path.join(my_folder, file)
-                os.remove(file)
-
-        st.session_state.found_ents = True
-
-        # Button below the text area
-        #if st.button('Artikel speichern'):
-        #    st.success('Artikel gespeichert.')
-
-
-
-# Rightmost column with Wikipedia information and buttons
+# Rightmost column with Wikipedia or Insta information and buttons
 with right_column:
-    ##todo: It's not just about wiki_input
 
-    if st.session_state.found_ents == True:
+    with st.form(key='column_relevantparts', border=False):
+        #submitted = st.form_submit_button("Submit")
+        #placeholder_for_reset = st.empty()
+        if st.session_state.found_ents == True:
 
-        original_title = '<p style="font-family:Courier; color:White; font-size: 45px;">_</p>'
-        st.markdown(original_title, unsafe_allow_html=True)
+            ##original_title = '<p style="font-family:Courier; color:White; font-size: 45px;">_</p>'
+            #original_title = '<p style="font-family:Arial; color:Black; font-size: 45px;">Informationen</p>'
+            #st.markdown(original_title, unsafe_allow_html=True)
+            st.title('Relevante Inhalte')
+            
+            if st.session_state.clicked and st.session_state.found_a_wiki_entry:# and not st.session_state.found_ents:
 
-        
-        if st.session_state.clicked and st.session_state.found_a_wiki_entry:# and not st.session_state.found_ents:
+                i = 0
 
-            i = 0
+                #text_to_show = wf.concatenate_relevant_parts_to_show(st.session_state.relevant_parts_to_show)
+                #text_area_input = st.text_area("Wikipedia Artikel", height=int(150*len(text_to_show)/(38*5)), placeholder = "", value = text_to_show)#st.session_state.wiki_input)
+                #st.session_state.text_area_input = text_area_input
 
-            #text_to_show = wf.concatenate_relevant_parts_to_show(st.session_state.relevant_parts_to_show)
-            #text_area_input = st.text_area("Wikipedia Artikel", height=int(150*len(text_to_show)/(38*5)), placeholder = "", value = text_to_show)#st.session_state.wiki_input)
-            #st.session_state.text_area_input = text_area_input
+                # st.session_state.isall = st.checkbox('selektiere / deselektiere alle', key='sel', value=False)
 
-            st.session_state.isall = st.checkbox('selektiere / deselektiere alle', key='sel', value=False)
+                ##it's either one or the other currently:
+                if not st.session_state.relevant_parts_to_show ==  None and not st.session_state.relevant_parts_to_show == '':  
+                    for rp in st.session_state.relevant_parts_to_show.relevantparts:
 
-            ##it's either one or the other currently:
-            if not st.session_state.relevant_parts_to_show ==  None:  
-                for rp in st.session_state.relevant_parts_to_show.relevantparts:
+                        col1b, col2b = st.columns([0.5, 10])
+                        with col1b:
+                            st.checkbox('', key = "checkbox"+str(i), value=st.session_state.isall)#, on_change = sel_callback)#False)
 
-                    col1b, col2b = st.columns([0.5, 10])
-                    with col1b:
-                        st.checkbox('', key = "checkbox"+str(i), value=st.session_state.isall, on_change = sel_callback)#False)
+                        with col2b:
+                            ##adapting to usually 42 characters * 6 rows fitting a height 150 text_area
+                            text_area_input = st.text_area("Wikipedia Artikel", height=int(150*len(rp.fact)/(38*5)), placeholder = "", value = rp.fact, key = "text_area"+str(i))#"Text not yet retrieved")
+                            st.session_state.text_area_input = text_area_input
+                        i += 1
+                if not st.session_state.relevant_parts_to_show_insta ==  None:
+                    for rp in st.session_state.relevant_parts_to_show_insta.relevantparts:
 
-                    with col2b:
-                        ##adapting to usually 42 characters * 6 rows fitting a height 150 text_area
-                        text_area_input = st.text_area("Wikipedia Artikel", height=int(150*len(rp.fact)/(38*5)), placeholder = "", value = rp.fact, key = "text_area"+str(i))#"Text not yet retrieved")
-                        st.session_state.text_area_input = text_area_input
-                    i += 1
-            if not st.session_state.relevant_parts_to_show_insta ==  None:
-                for rp in st.session_state.relevant_parts_to_show_insta.relevantparts:
+                        col1b, col2b = st.columns([0.5, 10])
+                        with col1b:
+                            st.checkbox('', key = "checkbox"+str(i), value=st.session_state.isall)#, on_change = sel_callback)#False)
 
-                    col1b, col2b = st.columns([0.5, 10])
-                    with col1b:
-                        st.checkbox('', key = "checkbox"+str(i), value=st.session_state.isall, on_change = sel_callback)#False)
+                        with col2b:
+                            ##adapting to usually 42 characters * 6 rows fitting a height 150 text_area
+                            text_area_input = st.text_area("Insta Information", height=int(150*len(rp.fact)/(38*5)), placeholder = "", value = rp.fact, key = "text_area"+str(i))#"Text not yet retrieved")
+                            st.markdown(rp.source_url)
+                            st.session_state.text_area_input = text_area_input
+                        i += 1
 
-                    with col2b:
-                        ##adapting to usually 42 characters * 6 rows fitting a height 150 text_area
-                        text_area_input = st.text_area("Insta Information", height=int(150*len(rp.fact)/(38*5)), placeholder = "", value = rp.fact, key = "text_area"+str(i))#"Text not yet retrieved")
-                        st.session_state.text_area_input = text_area_input
-                    i += 1
+        #placeholder_for_radio = st.empty()
+        placeholder_for_reset = st.empty()
 
-            # Two buttons, one active and one inactive
-            if st.button('Quelle anzeigen'):
-                st.info('Quelle: Wikipedia')
-            rcol1, rcolmid, rcol2 = st.columns([1, 1.4, 1])
-            with rcol1:
-                st.button('Rückgängig', disabled=True)
-            with rcol2:
-                if st.button('Integrieren', disabled=False):
-                    st.session_state.user_input = "ABC"
-                    st.experimental_rerun() ##Seite neu laden, nicht erst unten anzeigen.
+                # # Two buttons, one active and one inactive
+                # if st.button('Quelle anzeigen'):
+                #     st.info('Quelle: Wikipedia')
+                # rcol1, rcolmid, rcol2 = st.columns([1, 1.4, 1])
+                # with rcol1:
+                #     st.button('Rückgängig', disabled=True)
+                # with rcol2:
+                #     if st.button('Integrieren', disabled=False):
+                #         st.session_state.user_input = "ABC"
+                #         st.experimental_rerun() ##Seite neu laden, nicht erst unten anzeigen.
+                
+        submitted = st.form_submit_button("Integriere Fakten")
 
+        #sm = st.form_submit_button(label="Submit")
+        #if sm: 
+        #    print('abc')
+        if submitted: 
+            ##TODO: mark already integrated facts, so they are not integrated again. 
+            ## Do not mark facts that could not be integrated.
+            facts_to_integrate = []
+            if not st.session_state.relevant_parts_to_show == None:
+                for i in range(len(st.session_state.relevant_parts_to_show.relevantparts)):#2):
+                    if st.session_state.get("checkbox"+str(i)) == True:
+                        ##TODO: integrate that fact, possibly first collect aall facts to be integrated:
+                        print('True')
+                        facts_to_integrate.append("Fact: "+ st.session_state.relevant_parts_to_show.relevantparts[i].fact)
+                    else:
+                        print(False)
+            if not st.session_state.relevant_parts_to_show_insta == None:
+                for i in range(len(st.session_state.relevant_parts_to_show_insta.relevantparts)):#2):
+                    if st.session_state.get("checkbox"+str(i)) == True:
+                        ##TODO: integrate that fact, possibly first collect aall facts to be integrated:
+                        print('True')
+                        facts_to_integrate.append("Fact: " + st.session_state.relevant_parts_to_show_insta.relevantparts[i].fact)
+                    else:
+                        print(False)
+            print(facts_to_integrate)
+            text = st.session_state.user_input
+
+            st.session_state.integrated_text = wf.integrate_facts(text, facts_to_integrate, chosen_model=st.session_state.model, temperature=0)
+            print(st.session_state.integrated_text)
+            with middle_column:
+                pass
+                #st.markdown(integrated_text)
+                #st.text_area("Artikel mit integrierten Infos", height=400, value = st.session_state.integrated_text, key = "output_text")
+    
+
+    #with placeholder_for_radio: 
+    #    radio_option = st.radio("`st.radio`", ["Plants", "Animals"], horizontal=True, on_change = sel_callback)
+    with placeholder_for_reset: 
+        #radio_option = st.radio("`st.radio`", ["select all", "select all"], horizontal=True, on_change = sel_callback)
+        radio_checkbox = st.checkbox('selektiere / deselektiere alle', key='sel2', value=False, on_change = sel_callback)
+
+with middle_column:
+    with tab2: 
+        st.text_area("Artikel mit integrierten Infos", height=400, value = st.session_state.integrated_text, key = "output_text")
+    with tab3: 
+
+        html = st.session_state.integrated_text ##replace with diff
+        if html is not None:
+            html = '<del>'+"test_del"+'</del>'+html
+            diff_text = wf.show_diff(st.session_state.user_input, st.session_state.integrated_text)
+            #st.markdown(html, unsafe_allow_html=True)
+            st.markdown(diff_text, unsafe_allow_html=True)
+
+        else: 
+            html = '<del>'+"test_del"+'</del>'
+            st.markdown('Text unverändert')
+
+
+    ##TODO: return both the html as well as the final text only, show one in html, the other in text_area
+    # txt = html = "<html><body>"+"Some text here"+"</body></html>"
+
+    # #display(HTML(html))
+    # st.markdown(html, unsafe_allow_html=True)
+    # #st.text_area("",value=html, key="ta2", unsafe_allow_html=True)
+            
+##I could add stuff to the tiles here:
+# i = 0
+# for t in tiles: 
+#     with t: 
+#         if i == 0:
+#             #st.write('1st tile')
+#             # if st.button(f"Analysiere Wikipedia", key = "buttonz"+str(i), on_click = sel_callback):
+#             #     lang = st.session_state.wiki_lines_langs[i]
+#             #     set_relevant_parts_to_show(context, wiki_title, lang, True)
+#             #st.markdown(f"""{insta_line}xx""")
+#             pass
+#         else: 
+#             #st.write('tile with index no. '+str(i))
+#             pass
+#     i += 1
 
 print(st.session_state)
 

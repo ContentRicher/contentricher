@@ -34,6 +34,10 @@ from itertools import dropwhile, takewhile
 
 from a615_import_firefox_session import import_session_from_firefox, username
 
+import difflib
+
+from langchain_core.prompts import ChatPromptTemplate
+
 # set the folder name where images will be stored
 my_folder = "../img/"
 
@@ -57,11 +61,9 @@ API_KEY=os.getenv("API_KEY")
 client = OpenAI(api_key = API_KEY)
 
 MISTRAL_API_KEY=os.getenv("MISTRAL_API_KEY")
-mistral_model = "mistral-small"
+mistral_model = "mistral-small-latest"
 mistral_temperature = 0.15
 mistral_client = MistralClient(api_key=MISTRAL_API_KEY)
-
-chosen_model = 'Mistral Small'#'GPT-3.5'
 
 if API_KEY != "[PUT YOUR OPENAI API KEY HERE]" and MISTRAL_API_KEY !="[PUT YOUR MISTRAL API KEY HERE]":
     options = ['Mistral Small', 'GPT-3.5']
@@ -72,6 +74,10 @@ elif MISTRAL_API_KEY != "[PUT YOUR MISTRAL API KEY HERE]":
 else: 
     options = []
 
+if 'Mistral Small' in options:
+    chosen_model = 'Mistral Small'
+else:
+    chosen_model = 'GPT-3.5'
 
 #from langchain.llms import OpenAI
 from langchain_community.chat_models import ChatOpenAI 
@@ -84,18 +90,24 @@ temperature = 0.0
 openai_model = ChatOpenAI(openai_api_key=API_KEY, model_name=model_name, temperature=temperature)
 
 mistral_model_name = "mistral-small"
-mistral_model = ChatMistralAI(mistral_api_key=MISTRAL_API_KEY, model_name=mistral_model_name, temperature=mistral_temperature)
+mistral_model_lc = ChatMistralAI(mistral_api_key=MISTRAL_API_KEY, model_name=mistral_model_name, temperature=mistral_temperature)
+
 
 ##not here:
-def get_model(chosen_model):
-    if chosen_model ==  'Mistral Small': 
-        model = mistral_model ##TODO: only works with OpenAI so far, need to get LangChain Mistral Client, not handing over client from API
-    elif chosen_model == 'GPT-3.5':
+##For parsing, use the Langchain models (slightly different names than models I access directly via API call):
+def get_model(chosen_modelX=chosen_model):
+    if chosen_modelX ==  'Mistral Small': 
+        model = mistral_model_lc ##TODO: only works with OpenAI so far, need to get LangChain Mistral Client, not handing over client from API
+    elif chosen_modelX == 'GPT-3.5':
         model = openai_model
     else: 
         ##TODO handle this case
         model = openai_model
     return model
+
+def set_model(chosen_modelX=chosen_model):
+    chosen_model = chosen_modelX
+    model = get_model(chosen_model)
 
 ##will be replaced by user's choice in frontend later
 model = get_model(chosen_model)
@@ -163,16 +175,28 @@ class RankedWikiEntries(BaseModel):
     rankedLinks: List[RankedEntry] 
 
 
-def ask_openai(system_intel, prompt):
-    result = client.chat.completions.create(model="gpt-3.5-turbo-0125",#"gpt-4-1106-preview",#"gpt-3.5-turbo-1106",#"gpt-3.5-turbo",
-                                messages = [{"role": "system", "content": system_intel},
-                                        {"role": "user", "content": prompt}],
-                                        stream=False
-            )
+def ask_openai(system_intel, prompt, temperature=None):
+    if temperature == None:
+        result = client.chat.completions.create(model="gpt-3.5-turbo-0125",#"gpt-4-1106-preview",#"gpt-3.5-turbo-1106",#"gpt-3.5-turbo",
+                                    messages = [{"role": "system", "content": system_intel},
+                                            {"role": "user", "content": prompt}],
+                                            stream=False
+                )
+    else:
+        result = client.chat.completions.create(model="gpt-3.5-turbo-0125",#"gpt-4-1106-preview",#"gpt-3.5-turbo-1106",#"gpt-3.5-turbo",
+                                    messages = [{"role": "system", "content": system_intel},
+                                            {"role": "user", "content": prompt}],
+                                            stream=False,
+                                    temperature = temperature
+                )
     #display(Markdown(result['choices'][0]['message']['content']))
     return result.choices[0].message.content
     
-def ask_mistral(system_intel, prompt): 
+def ask_mistral(system_intel, prompt, temperature=None): 
+    if temperature is not None:
+        temp = temperature
+    else: 
+        temp = mistral_temperature
     messages = [
         ChatMessage(role="system", content=system_intel),
         ChatMessage(role="user", content=prompt)
@@ -181,34 +205,54 @@ def ask_mistral(system_intel, prompt):
     chat_response = mistral_client.chat(
         model=mistral_model,
         messages=messages,
-        temperature = mistral_temperature
+        temperature = temp
     )
+    print(chat_response)
     return chat_response.choices[0].message.content
+   
 
-def ask_GPT(system_intel, prompt, chosen_model='GPT-3.5'): 
+def ask_GPT(system_intel, prompt, chosen_model='GPT-3.5', temperature=None, json_only=True): 
     if chosen_model == 'GPT-3.5':
-        return ask_openai(system_intel, prompt)
+        return ask_openai(system_intel, prompt, temperature)
     elif chosen_model == 'Mistral Small': ##model is Mistral
-        return ask_mistral(system_intel, prompt)
+        return ask_mistral(system_intel, prompt, temperature)
     else:
         return ''
 
 
-def parse_results(res, pydantic_object, llm=model):
+def parse_results(res, pydantic_object, llm=model, chosen_model=chosen_model, iteration_no=1):
     ##temporarily overwriting input variable to use openai model for parsing:
-    #llm = openai_model
+    # llm = openai_model
+    # chosen_model = 'GPT-3.5'
+
+    if iteration_no == 3:
+        return None
+
+    print("in parse_results - llm:")
+    print(llm)
+    print('chosen_model:')
+    print(chosen_model)
+
+    parsed = None
 
     try: 
         parser = PydanticOutputParser(pydantic_object=pydantic_object) 
         parsed = parser.invoke(res)
     except:
-        fixing_parser = OutputFixingParser.from_llm(parser=parser, llm=llm)
-        parsed = fixing_parser.invoke(res)
+        print('in except')
+        try:
+            fixing_parser = OutputFixingParser.from_llm(parser=parser, llm=llm)
+            parsed = fixing_parser.invoke(res)
+        except: 
+            #parsed = None
+            print('Another exception occurred while parsing the LLM results, parsing with GPT-3.5')
+            return parse_results(res, pydantic_object, get_model('GPT-3.5'), chosen_model='GPT-3.5', iteration_no=iteration_no+1)
 
+    print(parsed)
     return parsed
 
 
-def get_wiki_urls(entity, context):
+def get_wiki_urls(entity, context, chosen_model=chosen_model):
 
     system_intel = """You are an expert researcher and an expert in Wikipedia."""
     prompt = f"""Given the entity {entity} and the context {context}, find the most probable Wikipedia pages for it.""" 
@@ -238,16 +282,16 @@ def get_wiki_urls(entity, context):
     prompt += f"""Return your answer as plain JSON, and following the following format, return only the JSON object:
     {json_template}"""
 
-    res = ask_GPT(system_intel, prompt) ##DONE: wrapper around OpenAI and Mistral models
+    res = ask_GPT(system_intel, prompt, chosen_model=chosen_model) ##DONE: wrapper around OpenAI and Mistral models
     model = get_model(chosen_model)
 
     ##Parse results
-    parsed = parse_results(res, pydantic_object=URL_propositions, llm=model)
+    parsed = parse_results(res, pydantic_object=URL_propositions, llm=model, chosen_model=chosen_model)
 
     return parsed
 
 
-def get_all_wiki_urls(context):
+def get_all_wiki_urls(context, chosen_model=chosen_model):
 
     system_intel = """You are an expert researcher and an expert in Wikipedia."""
     prompt = f"""Given the context {context}, find the distinct people mentioned and for each the most probable two Wikipedia pages for it.
@@ -294,18 +338,21 @@ def get_all_wiki_urls(context):
     prompt += f"""Return your answer as plain JSON, and following the following format, return only the JSON object:
     {json_template}"""
 
-    res = ask_GPT(system_intel, prompt) 
+    res = ask_GPT(system_intel, prompt, chosen_model=chosen_model) 
+    print('chosen_model in get_all_wiki_urls before assigning model:')
+    print(chosen_model)
     model = get_model(chosen_model)
+    print(model)
 
     ##Parse results
-    parsed = parse_results(res, pydantic_object=Entities, llm=model)
+    parsed = parse_results(res, pydantic_object=Entities, llm=model, chosen_model=chosen_model)
 
     return parsed
 
 
 ##NOTE: it may invent a page,  mostly for the fanpage, e.g. if no such fanpage exists
 ##TODO: put a try except block in the call that uses the results
-def get_insta_urls(entity, context):
+def get_insta_urls(entity, context, chosen_model=chosen_model):
 
     system_intel = """You are an expert researcher and an expert in Instagram and Influencers."""
     prompt = f"""Given the following person and the textual context, find the most probable Instagram profile/s with the URL/s that belong to that same person.
@@ -342,13 +389,13 @@ def get_insta_urls(entity, context):
     JSON Template:
     {json_template}"""
 
-    res = ask_GPT(system_intel, prompt)
+    res = ask_GPT(system_intel, prompt, chosen_model=chosen_model)
     #print(res)
 
     model = get_model(chosen_model)
 
     ##Parse results
-    parsed = parse_results(res, pydantic_object=Insta_URL_propositions, llm=model)
+    parsed = parse_results(res, pydantic_object=Insta_URL_propositions, llm=model, chosen_model=chosen_model)
 
     return parsed
 
@@ -427,7 +474,7 @@ def get_page_content(context, title, language='de'):
     return res#p.content
 
 
-def get_relevant_parts(context, text, wiki_title, translate=True, source_insta_posts=False):
+def get_relevant_parts(context, text, wiki_title, translate=True, source_insta_posts=False, chosen_model=chosen_model):
     ##try getting most relevant part for the given context:
     ##maybe add target_group later:
     #target_group = 'Young adults'
@@ -548,7 +595,7 @@ def get_relevant_parts(context, text, wiki_title, translate=True, source_insta_p
     ##later add to prompt:
     #    and that is relevant for the target group {target_group}.
 
-    res = ask_GPT(system_intel, prompt) ##TODO replace by langchain generic call (llm replaceable)
+    res = ask_GPT(system_intel, prompt, chosen_model=chosen_model) ##TODO replace by langchain generic call (llm replaceable)
 
     #res = translate_content_new(res)
 
@@ -557,18 +604,18 @@ def get_relevant_parts(context, text, wiki_title, translate=True, source_insta_p
 
     ##Parse results
     if source_insta_posts == True:
-        parsed = parse_results(res, pydantic_object=RelevantPartsInsta, llm=model)
+        parsed = parse_results(res, pydantic_object=RelevantPartsInsta, llm=model, chosen_model=chosen_model)
     else:
         if translate==True:
-            parsed = parse_results(res, pydantic_object=RelevantPartsDe, llm=model)
+            parsed = parse_results(res, pydantic_object=RelevantPartsDe, llm=model, chosen_model=chosen_model)
         else: 
-            parsed = parse_results(res, pydantic_object=RelevantParts, llm=model)
+            parsed = parse_results(res, pydantic_object=RelevantParts, llm=model, chosen_model=chosen_model)
 
     #print(parsed)
     return parsed
 
 
-def translate_content(parsed_input, lang_in, lang_out):
+def translate_content(parsed_input, lang_in, lang_out, chosen_model=chosen_model):
     if lang_in == "en": 
         lang_in = "English"
     elif lang_in == "fr": 
@@ -608,12 +655,12 @@ def translate_content(parsed_input, lang_in, lang_out):
     {json_template}
     """
 
-    res = ask_GPT(system_intel, prompt) ##TODO replace by langchain generic call (llm replaceable)
+    res = ask_GPT(system_intel, prompt, chosen_model=chosen_model) ##TODO replace by langchain generic call (llm replaceable)
 
     return res
 
 
-def translate_content_new(parsed_input, lang_in, lang_out):
+def translate_content_new(parsed_input, lang_in, lang_out, chosen_model=chosen_model):
     if lang_in == "en": 
         lang_in = "English"
     elif lang_in == "fr": 
@@ -705,7 +752,7 @@ def translate_content_new(parsed_input, lang_in, lang_out):
     Output list of Pydantic Objects:
     """
 
-    res = ask_GPT(system_intel, prompt) ##TODO replace by langchain generic call (llm replaceable)
+    res = ask_GPT(system_intel, prompt, chosen_model=chosen_model) ##TODO replace by langchain generic call (llm replaceable)
 
     return res
 
@@ -835,7 +882,7 @@ def shrink_image(input_path, output_path, max_dimension=512):
     return resized_image
 
 
-def get_best_entry(context, options_string, title):
+def get_best_entry(context, options_string, title, chosen_model=chosen_model):
     json_template = """
     {
     "query": "Sustainable gardening",
@@ -883,11 +930,11 @@ def get_best_entry(context, options_string, title):
     JSON:
     """
 
-    res = ask_GPT(system_intel, prompt)
+    res = ask_GPT(system_intel, prompt, chosen_model=chosen_model)
     model = get_model(chosen_model)
 
     ##Parse results
-    parsed = parse_results(res, pydantic_object=RankedWikiEntries, llm=model)
+    parsed = parse_results(res, pydantic_object=RankedWikiEntries, llm=model, chosen_model=chosen_model)
 
     return parsed
 
@@ -1114,6 +1161,68 @@ def check_sessionfile_date():
     print(f"Creation datetime: {creation_time}")
     print(f"Modification datetime: {modification_time}")
     return modification_time
+
+
+def integrate_facts(text, list_of_facts, chosen_model=chosen_model, temperature=None, json_only=False):
+
+    language = 'GERMAN'
+    system_intel = f"""You are a journalist and great at adding information to articles seamlessly."""
+    prompt = f"""Take a deep breath and read all the instructions before you start: 
+    Given the following text and the list of facts below, keep the article as much as possible as it is, but try inserting all the facts given below where they fit best within the article, either as additional sentences or 
+    as subclauses to existing sentences. If you think a fact does really not fit into the text, 
+    append it to the end, starting with: "Die folgenden Fakten wurden nicht integriert:"
+    Do not insert the "Fact: " part of the sentence, but only the information provided. 
+    Keep the rest of the text as it was. Also keep initial titles, only alter them if needed. 
+    Answer ONLY in {language}: If the list of facts are in a different language than the text itself, then translate the facts into the language of the Text before inserting them.
+    Do NOT INVENT ANYTHIN and DO NOT GENERALIZE A SINGLE FACT (EVENT) TO A LONGER PERIOD OF TIME.
+    
+    Text: 
+    {text}
+
+    List of facts:
+    {list_of_facts}
+    """ 
+
+
+
+    #prompt += f"""Return your answer as plain JSON, and following the following format, return only the JSON object:
+    #{json_template}"""
+    prompt += f"""Return **ONLY** the new text, no additional explanation"""
+
+    res = ask_GPT(system_intel, prompt, chosen_model=chosen_model, temperature=temperature, json_only=json_only) 
+    # model = get_model(chosen_model)
+
+    # ##Parse results
+    # parsed = parse_results(res, pydantic_object=Entities, llm=model, chosen_model=chosen_model)
+
+    # return parsed
+    return res
+
+
+def show_diff(V1, V2):
+    # function from https://stackoverflow.com/questions/774316/python-difflib-highlighting-differences-inline
+    """Unify operations between two compared strings
+    seqm is a difflib.SequenceMatcher instance whose a & b are strings"""
+    seqm= difflib.SequenceMatcher(None, V1, V2)
+
+    output= []
+    for opcode, a0, a1, b0, b1 in seqm.get_opcodes():
+        if opcode == 'equal':
+            output.append(seqm.a[a0:a1])
+        elif opcode == 'insert':
+            output.append("<ins>" + seqm.b[b0:b1] + "</ins>")
+        elif opcode == 'delete':
+            output.append("<del>" + seqm.a[a0:a1] + "</del>")
+        elif opcode == 'replace':
+            #raise NotImplementedError( "what to do with 'replace' opcode?" )
+            ##VG I put this: To test
+            output.append("<ins>" + seqm.b[b0:b1] + "</ins>")
+            output.append("<del>" + seqm.a[a0:a1] + "</del>")
+        else:
+            raise RuntimeError( f"unexpected opcode unknown opcode {opcode}" )
+    res1 = ''.join(output)
+    html = "<html><body>"+res1+"</body></html>"
+    return html
 
 
 if __name__ == "__main__":
