@@ -14,6 +14,8 @@ import os
 from dotenv import load_dotenv
 import os
 
+import markdownify
+import extra_streamlit_components as stx
 
 load_dotenv()
 
@@ -103,8 +105,68 @@ if "person_sought" not in st.session_state:
 if "integrated_text" not in st.session_state:
     st.session_state.integrated_text = None
 
+# if 'active_tab' not in st.session_state:
+#     st.session_state.active_tab = 'tab2'  # Set initial tab ID here
+
+if 'btn_label' not in st.session_state:
+    st.session_state.btn_label = "Edit Text"
+
+if "user_edited_text" not in st.session_state:
+    st.session_state.user_edited_text = st.session_state.user_input
+
+if "diff_text" not in st.session_state:
+    st.session_state.diff_text  = ""#st.session_state.user_input
+if "diff_text2" not in st.session_state:
+    st.session_state.diff_text2 = ""#st.session_state.user_input
+
+# Initialize session state variables
+if 'editing' not in st.session_state:                
+    st.session_state.editing = False  # Track whether we are currently editing
+if 'markdown_content' not in st.session_state:
+    st.session_state.markdown_content = st.session_state.user_edited_text #"This is **Markdown** content."  # The Markdown text
+
+if 'editing2' not in st.session_state:                
+    st.session_state.editing2 = False  # Track whether we are currently editing
+if 'markdown_content2' not in st.session_state:
+    if 'diff_text2' in st.session_state:
+        st.session_state.markdown_content2 = st.session_state.diff_text2
+    else:
+        st.session_state.markdown_content2 = st.session_state.user_edited_text #"This is **Markdown** content."  # The Markdown text
+
+if 'editing4' not in st.session_state:                
+    st.session_state.editing4 = False  # Track whether we are currently editing
+if 'markdown_content4' not in st.session_state:
+    st.session_state.markdown_content4 = st.session_state.user_input
+
+if 'editing5' not in st.session_state:                
+    st.session_state.editing5 = True#False  # Track whether we are currently editing; Set to true if we make it all one area
+if 'markdown_content5' not in st.session_state:
+    st.session_state.markdown_content5 = st.session_state.user_input
+if 'last_confirmed' not in st.session_state:    
+    ##maybe need to set it once I change it            
+    st.session_state.last_confirmed = st.session_state.user_input
+
+if 'first_edit' not in st.session_state:                
+    st.session_state.first_edit = True  # Track whether we are currently editing
+
+
+if 'integrated_text_tmp' not in st.session_state:
+    st.session_state.integrated_text_tmp = ""
+if 'last_confirmed_tmp' not in st.session_state:
+    st.session_state.last_confirmed_tmp = ""
+if 'diff_text_tmp' not in st.session_state:
+    st.session_state.diff_text_tmp = ""
+if 'diff_text2_tmp' not in st.session_state:
+    st.session_state.diff_text2_tmp = ""
+
+
+if 'article_text' not in st.session_state: 
+    st.session_state.article_text = default_text 
+
+
 def set_clicked():
     st.session_state.clicked = True
+
 
 def set_relevant_parts_to_show(context, wiki_title, language='de', translate=True):
     print('in set_relevant_parts_to_show')
@@ -233,7 +295,7 @@ def get_insta_line(instaent):
                     if not (insta_verified == None) and insta_verified == True:
                         insta_line = f"""- [Instagram]({insta_url}) - {insta_username} :white_check_mark:"""
                     else: 
-                        insta_line = f"""- [Instagram]({insta_url}) - {insta_username}"""
+                        insta_line = """"""#f"""- [Instagram]({insta_url}) - {insta_username}"""
                     #text = wf.get_page_content(context, insta_title, lang)
                 else:
                     print('insta url not valid')
@@ -273,6 +335,126 @@ def recalc_images():
             except: ##e.g. no image found before
                 st.image(create_dummy_image(), width=100)#, caption=person_name)
 
+
+def reset_field(placeholder):#, edit_btn):
+    with placeholder:
+        placeholder.empty()
+        placeholder.text_area("Editable field 2",value=st.session_state.user_input, height=500, key="aaab")
+
+        if st.session_state.btn_label == "Edit Text":
+            st.session_state.btn_label = "Save Text"  # Update this to your desired new label
+        elif st.session_state.btn_label == "Save Text":
+            st.session_state.btn_label = "Edit Text"
+        else: 
+            st.session_state.btn_label = "Edit Text"
+
+
+def create_diff_wo_deletes(baseline=st.session_state.user_input, new_text=st.session_state.integrated_text):
+    html = new_text#st.session_state.integrated_text ##replace with diff
+    if html is not None:
+        st.session_state.diff_text = wf.show_diff(baseline, new_text)
+        st.session_state.diff_text2 = wf.remove_del_tags(st.session_state.diff_text)
+    return st.session_state.diff_text, st.session_state.diff_text2
+
+
+def start_editing5():
+    st.session_state.editing5 = True
+
+
+def stop_editing5(calc_diff=True):
+    st.session_state.editing5 = False
+    
+    st.session_state.markdown_content5 = st.session_state.new_content5  # Update the Markdown content
+    if calc_diff:
+        st.session_state.diff_text, st.session_state.diff_text2 = create_diff_wo_deletes(baseline=st.session_state.user_input, new_text=st.session_state.new_content5)
+    else: 
+        st.session_state.diff_text = ''
+        st.session_state.diff_text2 = ''
+    st.session_state.last_confirmed = st.session_state.article_text
+
+
+def set_texts(text=st.session_state.user_input):
+
+    facts_to_integrate = []
+    if not st.session_state.relevant_parts_to_show == None:
+        for i in range(len(st.session_state.relevant_parts_to_show.relevantparts)):#2):
+            if st.session_state.get("checkbox"+str(i)) == True:
+                ##TODO: integrate that fact, possibly first collect aall facts to be integrated:
+                print('True')
+                facts_to_integrate.append("Fact: "+ st.session_state.relevant_parts_to_show.relevantparts[i].fact)
+            else:
+                print(False)
+    if not st.session_state.relevant_parts_to_show_insta == None:
+        for i in range(len(st.session_state.relevant_parts_to_show_insta.relevantparts)):#2):
+            if st.session_state.get("checkbox"+str(i)) == True:
+                ##TODO: integrate that fact, possibly first collect aall facts to be integrated:
+                print('True')
+                facts_to_integrate.append("Fact: " + st.session_state.relevant_parts_to_show_insta.relevantparts[i].fact)
+            else:
+                print(False)
+    print(facts_to_integrate)
+
+    st.session_state.integrated_text = wf.integrate_facts(text, facts_to_integrate, chosen_model=st.session_state.model, temperature=0)
+    st.session_state.article_text = st.session_state.integrated_text
+
+    st.session_state.last_confirmed = st.session_state.integrated_text ##Abrakadabra
+
+    with middle_column:
+        st.session_state.active_tab = "tab3"
+        pass
+
+    st.session_state.diff_text, st.session_state.diff_text2 = create_diff_wo_deletes(st.session_state.user_input, st.session_state.integrated_text)
+    st.session_state.editing5 = False ##show result as markdown with diff
+
+
+def reset_texts():
+    st.session_state.integrated_text_tmp = st.session_state.integrated_text
+    st.session_state.integrated_text = st.session_state.user_input
+
+    st.session_state.last_confirmed_tmp = st.session_state.last_confirmed#st.session_state.new_content5#st.session_state.last_confirmed
+    st.session_state.last_confirmed = st.session_state.user_input
+
+    st.session_state.diff_text_tmp = st.session_state.diff_text
+    st.session_state.diff_text = st.session_state.user_input
+    
+    st.session_state.diff_text2_tmp = st.session_state.diff_text2
+    st.session_state.diff_text2 = st.session_state.user_input
+
+    st.session_state.article_text_tmp = st.session_state.article_text
+    st.session_state.article_text = st.session_state.user_input
+
+
+def clear():
+    print('in clear')
+    st.session_state.current_iteration = 0
+    st.session_state.editing5 = True
+    st.session_state.diff_text = ''
+    st.session_state.diff_text2 = ''
+    st.session_state.article_text = ''
+    st.session_state.integrated_text = ''
+    st.session_state.last_confirmed = ''
+
+
+def repeat():
+    if 'integrated_text_tmp' in st.session_state:
+        st.session_state.integrated_text = st.session_state.integrated_text_tmp
+    else:
+        st.session_state.integrated_text = st.session_state.user_input
+    if 'last_confirmed_tmp' in st.session_state:
+        #st.session_state.last_confirmed = st.session_state.last_confirmed_tmp
+        st.session_state.new_content5 = st.session_state.last_confirmed_tmp
+    else:
+        st.session_state.last_confirmed = st.session_state.user_input
+    if 'diff_text_tmp' in st.session_state:
+        st.session_state.diff_text = st.session_state.diff_text_tmp
+    else:
+        st.session_state.diff_text = st.session_state.user_input
+    if 'diff_text2_tmp' in st.session_state:
+        st.session_state.diff_text2 = st.session_state.diff_text2_tmp
+    else:
+        st.session_state.diff_text2 = st.session_state.user_input
+
+
 tiles_left = []
 tiles_middle = []
 tiles_right = []
@@ -311,10 +493,23 @@ my_folder = "../img/"#'wiki_images'#wf.my_folderwf.my_folder
 with middle_column:
     st.title('Artikel und Personen')
     
-    tab1, tab2, tab3 = st.tabs(["Input", "Output", "Output mit hervorgehobenen Änderungen"])
+    if 1 == 1:
 
-    with tab1: 
-        article_text = st.text_area("Artikel Text", height=400, value = st.session_state.user_input)
+        if st.session_state.editing5:
+            article_text = st.text_area("Edit the text", value=st.session_state.last_confirmed, key='new_content5',height=400)
+            st.session_state.article_text = article_text
+
+            ##only if already did at least one integration or edit to the text: ##TBD if I type the text what happens
+            if 'diff_text' in st.session_state and st.session_state.diff_text != '':
+                st.button("Save", on_click=stop_editing5)  # Clicking this will save the content and exit editing mode
+        else:
+            if 'diff_text' in st.session_state and not st.session_state.diff_text == '': ##TBD: maybe not show deletions, then take diff_text2 instead
+                st.markdown(st.session_state.diff_text.replace("\n", "<br>"), unsafe_allow_html=True)
+            else: 
+                st.markdown(st.session_state.last_confirmed, unsafe_allow_html=True)
+            st.button("Edit", on_click=start_editing5)  # Clicking this will switch to editing mode
+        st.button("Clear", on_click=clear) 
+
 
     if st.session_state.button_find_disabled == True: ##Button disabled
         st.markdown('No Key found. Please insert your key in the .env file.')
@@ -335,7 +530,7 @@ with middle_column:
             #st.success('Personen hervorgehoben.')
             st.session_state.find_person_clicked = True
             st.session_state.clicked = False ##reset, not showing elements that have nothing to do with new selection
-            st.session_state.user_input = article_text ##TODO check if it always gets the current text
+            st.session_state.user_input = st.session_state.new_content5#article_text ##TODO check if it always gets the current text
             print('chosen_model when calling get_all_wiki_urls:')
             print(chosen_model)
             st.session_state.parsed_ents = wf.get_all_wiki_urls(st.session_state.user_input, chosen_model=st.session_state.model)
@@ -553,12 +748,6 @@ with right_column:
 
                 i = 0
 
-                #text_to_show = wf.concatenate_relevant_parts_to_show(st.session_state.relevant_parts_to_show)
-                #text_area_input = st.text_area("Wikipedia Artikel", height=int(150*len(text_to_show)/(38*5)), placeholder = "", value = text_to_show)#st.session_state.wiki_input)
-                #st.session_state.text_area_input = text_area_input
-
-                # st.session_state.isall = st.checkbox('selektiere / deselektiere alle', key='sel', value=False)
-
                 ##it's either one or the other currently:
                 if not st.session_state.relevant_parts_to_show ==  None and not st.session_state.relevant_parts_to_show == '':  
                     for rp in st.session_state.relevant_parts_to_show.relevantparts:
@@ -588,99 +777,25 @@ with right_column:
 
         #placeholder_for_radio = st.empty()
         placeholder_for_reset = st.empty()
-
-                # # Two buttons, one active and one inactive
-                # if st.button('Quelle anzeigen'):
-                #     st.info('Quelle: Wikipedia')
-                # rcol1, rcolmid, rcol2 = st.columns([1, 1.4, 1])
-                # with rcol1:
-                #     st.button('Rückgängig', disabled=True)
-                # with rcol2:
-                #     if st.button('Integrieren', disabled=False):
-                #         st.session_state.user_input = "ABC"
-                #         st.experimental_rerun() ##Seite neu laden, nicht erst unten anzeigen.
                 
-        submitted = st.form_submit_button("Integriere Fakten")
+        submitted = st.form_submit_button("Integriere Fakten", on_click=set_texts, args=[st.session_state.article_text])#last_confirmed])#new_content5])#last_confirmed])
+        
 
-        #sm = st.form_submit_button(label="Submit")
-        #if sm: 
-        #    print('abc')
-        if submitted: 
-            ##TODO: mark already integrated facts, so they are not integrated again. 
-            ## Do not mark facts that could not be integrated.
-            facts_to_integrate = []
-            if not st.session_state.relevant_parts_to_show == None:
-                for i in range(len(st.session_state.relevant_parts_to_show.relevantparts)):#2):
-                    if st.session_state.get("checkbox"+str(i)) == True:
-                        ##TODO: integrate that fact, possibly first collect aall facts to be integrated:
-                        print('True')
-                        facts_to_integrate.append("Fact: "+ st.session_state.relevant_parts_to_show.relevantparts[i].fact)
-                    else:
-                        print(False)
-            if not st.session_state.relevant_parts_to_show_insta == None:
-                for i in range(len(st.session_state.relevant_parts_to_show_insta.relevantparts)):#2):
-                    if st.session_state.get("checkbox"+str(i)) == True:
-                        ##TODO: integrate that fact, possibly first collect aall facts to be integrated:
-                        print('True')
-                        facts_to_integrate.append("Fact: " + st.session_state.relevant_parts_to_show_insta.relevantparts[i].fact)
-                    else:
-                        print(False)
-            print(facts_to_integrate)
-            text = st.session_state.user_input
-
-            st.session_state.integrated_text = wf.integrate_facts(text, facts_to_integrate, chosen_model=st.session_state.model, temperature=0)
-            print(st.session_state.integrated_text)
-            with middle_column:
-                pass
-                #st.markdown(integrated_text)
-                #st.text_area("Artikel mit integrierten Infos", height=400, value = st.session_state.integrated_text, key = "output_text")
-    
-
-    #with placeholder_for_radio: 
-    #    radio_option = st.radio("`st.radio`", ["Plants", "Animals"], horizontal=True, on_change = sel_callback)
     with placeholder_for_reset: 
         #radio_option = st.radio("`st.radio`", ["select all", "select all"], horizontal=True, on_change = sel_callback)
         radio_checkbox = st.checkbox('selektiere / deselektiere alle', key='sel2', value=False, on_change = sel_callback)
 
-with middle_column:
-    with tab2: 
-        st.text_area("Artikel mit integrierten Infos", height=400, value = st.session_state.integrated_text, key = "output_text")
-    with tab3: 
-
-        html = st.session_state.integrated_text ##replace with diff
-        if html is not None:
-            html = '<del>'+"test_del"+'</del>'+html
-            diff_text = wf.show_diff(st.session_state.user_input, st.session_state.integrated_text)
-            #st.markdown(html, unsafe_allow_html=True)
-            st.markdown(diff_text, unsafe_allow_html=True)
-
-        else: 
-            html = '<del>'+"test_del"+'</del>'
-            st.markdown('Text unverändert')
+    rcol1, rcolmid, rcol2 = st.columns([2.6, 2.3, 2.3])
+    with rcolmid:
+        did_reset = st.button('Alles rückgängig', on_click=reset_texts)#disabled=True)
+    with rcol2:
+        #pass
+        if not st.session_state.integrated_text_tmp:#did_reset:
+            st.button('Wiederhole', on_click=repeat, disabled=True)
+        else:
+            st.button('Wiederhole', on_click=repeat, disabled=False)
 
 
-    ##TODO: return both the html as well as the final text only, show one in html, the other in text_area
-    # txt = html = "<html><body>"+"Some text here"+"</body></html>"
-
-    # #display(HTML(html))
-    # st.markdown(html, unsafe_allow_html=True)
-    # #st.text_area("",value=html, key="ta2", unsafe_allow_html=True)
-            
-##I could add stuff to the tiles here:
-# i = 0
-# for t in tiles: 
-#     with t: 
-#         if i == 0:
-#             #st.write('1st tile')
-#             # if st.button(f"Analysiere Wikipedia", key = "buttonz"+str(i), on_click = sel_callback):
-#             #     lang = st.session_state.wiki_lines_langs[i]
-#             #     set_relevant_parts_to_show(context, wiki_title, lang, True)
-#             #st.markdown(f"""{insta_line}xx""")
-#             pass
-#         else: 
-#             #st.write('tile with index no. '+str(i))
-#             pass
-#     i += 1
 
 print(st.session_state)
 

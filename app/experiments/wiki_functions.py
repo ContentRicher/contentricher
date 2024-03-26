@@ -35,8 +35,11 @@ from itertools import dropwhile, takewhile
 from a615_import_firefox_session import import_session_from_firefox, username
 
 import difflib
+import re
 
+from groq import Groq
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_groq import ChatGroq
 
 # set the folder name where images will be stored
 my_folder = "../img/"
@@ -74,8 +77,15 @@ elif MISTRAL_API_KEY != "[PUT YOUR MISTRAL API KEY HERE]":
 else: 
     options = []
 
+GROQ_KEY=os.getenv("GROQ_KEY")
+if GROQ_KEY != "[PUT YOUR GROQ KEY HERE]":
+    options.append('Groq with Mixtral-8x7b')
+
+
 if 'Mistral Small' in options:
     chosen_model = 'Mistral Small'
+elif 'Groq with Mixtral-8x7b' in options:
+    chosen_model = 'Mixtral-8x7b'#'Groq with Mixtral-8x7b'
 else:
     chosen_model = 'GPT-3.5'
 
@@ -92,14 +102,37 @@ openai_model = ChatOpenAI(openai_api_key=API_KEY, model_name=model_name, tempera
 mistral_model_name = "mistral-small"
 mistral_model_lc = ChatMistralAI(mistral_api_key=MISTRAL_API_KEY, model_name=mistral_model_name, temperature=mistral_temperature)
 
+groq_model_name = "mixtral-8x7b-32768"
+GROQ_KEY=os.getenv("GROQ_KEY")
+groq_temperature = 0.5
+groq_client = Groq(api_key=GROQ_KEY,)#, model_name=groq_model_name, temperature=groq_temperature)
+##langchain model:
+groq_chat_model = ChatGroq(temperature=groq_temperature, groq_api_key=GROQ_KEY, model_name=groq_model_name)
+
+# def chat_groq_mixtral(msg, history):
+#     messages = []
+#     for user_message, assistant_message in history:
+#         messages.append({"role": "user", "content": user_message})
+#         messages.append({"role": "assistant", "content": assistant_message})
+#     messages.append({"role": "user", "content": msg})
+#     chat_completion_stream = client.chat.completions.create(messages=messages, model=model, stream=True,)
+#     partial_outputs = ''
+#     for chunk in chat_completion_stream:
+#         delta = chunk.choices[0].delta.content
+#         if delta:
+#             partial_outputs += delta
+#             yield partial_outputs
 
 ##not here:
 ##For parsing, use the Langchain models (slightly different names than models I access directly via API call):
 def get_model(chosen_modelX=chosen_model):
+    #chosen_modelX = 'Groq with Mixtral-8x7b' ##tmp for test
     if chosen_modelX ==  'Mistral Small': 
         model = mistral_model_lc ##TODO: only works with OpenAI so far, need to get LangChain Mistral Client, not handing over client from API
     elif chosen_modelX == 'GPT-3.5':
         model = openai_model
+    elif chosen_modelX == 'Mixtral-8x7b':#'Groq with Mixtral-8x7b':
+        model = groq_chat_model
     else: 
         ##TODO handle this case
         model = openai_model
@@ -209,6 +242,69 @@ def ask_mistral(system_intel, prompt, temperature=None):
     )
     print(chat_response)
     return chat_response.choices[0].message.content
+
+def ask_groq_with_mixtral(system_intel, prompt, temperature=None, json_only=True):
+
+    if json_only == True: ##in json case, ensure it's not commenting and only returns json
+        prompt = prompt + """
+        Return ONLY the json object, nothing else. DO NOT COMMENT your answer, ONLY provide the json."""
+    else:
+        prompt = prompt + """
+        Return ONLY your answer, nothing else. DO NOT COMMENT your answer, ONLY provide the answer."""
+    print(prompt)
+    
+    chat_completion = groq_client.chat.completions.create(
+        #
+        # Required parameters
+        #
+        messages=[
+            # Set an optional system message. This sets the behavior of the
+            # assistant and can be used to provide specific instructions for
+            # how it should behave throughout the conversation.
+            {
+                "role": "system",
+                "content": system_intel,#"you are a helpful assistant."
+            },
+            # Set a user message for the assistant to respond to.
+            {
+                "role": "user",
+                "content": prompt,#"Explain the importance of low latency LLMs",
+            }
+        ],
+
+        # The language model which will generate the completion.
+        model="mixtral-8x7b-32768",
+
+        #
+        # Optional parameters
+        #
+
+        # Controls randomness: lowering results in less random completions.
+        # As the temperature approaches zero, the model will become deterministic
+        # and repetitive.
+        temperature=groq_temperature,#0.5,
+
+        # The maximum number of tokens to generate. Requests can use up to
+        # 32,768 tokens shared between prompt and completion.
+        max_tokens=32000,#32,768,
+
+        # Controls diversity via nucleus sampling: 0.5 means half of all
+        # likelihood-weighted options are considered.
+        top_p=1,
+
+        # A stop sequence is a predefined or user-specified text string that
+        # signals an AI to stop generating content, ensuring its responses
+        # remain focused and concise. Examples include punctuation marks and
+        # markers like "[end]".
+        stop=None,
+
+        # If set, partial message deltas will be sent.
+        stream=False,
+    )
+
+    # Print the completion returned by the LLM.
+    print(chat_completion.choices[0].message.content)  
+    return chat_completion.choices[0].message.content
    
 
 def ask_GPT(system_intel, prompt, chosen_model='GPT-3.5', temperature=None, json_only=True): 
@@ -216,6 +312,8 @@ def ask_GPT(system_intel, prompt, chosen_model='GPT-3.5', temperature=None, json
         return ask_openai(system_intel, prompt, temperature)
     elif chosen_model == 'Mistral Small': ##model is Mistral
         return ask_mistral(system_intel, prompt, temperature)
+    elif chosen_model == 'Mixtral-8x7b': ##model is Mixtral, using Groq
+        return ask_groq_with_mixtral(system_intel, prompt, temperature, json_only)
     else:
         return ''
 
@@ -1183,6 +1281,30 @@ def integrate_facts(text, list_of_facts, chosen_model=chosen_model, temperature=
     {list_of_facts}
     """ 
 
+    ##trying version understandable also by Mixtral
+    ##took out, but then it changes more and improves the text (TBD if wanted): 
+    stay_true = """Keep the rest of the text as it was. Also keep initial titles, only alter them if needed."""
+
+    prompt = f"""Take a deep breath and read all the instructions before you start: 
+    You are given a list of information bits. Read them. 
+    You are also given a text. Read it.
+    Now try inserting each information bit into the text where it suits best, while only changing parts of the text where it is necessary to include an information bit.
+    E.g. Add sentences or write subclauses to include that information. 
+    
+    If you think a fact does really not fit into the text, append it to the end, starting with: "Die folgenden Fakten wurden nicht integriert:"
+    Do not insert the "Fact: " part of the information bit sentence, but only the information provided with it. 
+    
+    Answer ONLY in {language}: If the list of facts are in a different language than the text itself, then translate the facts into the language of the Text before inserting them.
+    {stay_true}
+    Do NOT INVENT ANYTHING, DO NOT DELETE INFORMATION FROM THE TEXT and DO NOT GENERALIZE A SINGLE FACT (EVENT) TO A LONGER PERIOD OF TIME.
+    MAKE SURE AND DEPENDENT SENTENCES OR FOLLOWING SENTENCES STILL HAVE THE RIGHT REFERENCES TO ANYTHING FROM THE PRIOR TEXT AFTER YOU DO YOUR INSERTION (e.g. a 'Therefore').
+    
+    Text: 
+    {text}
+
+    List of information bits:
+    {list_of_facts}
+    """ 
 
 
     #prompt += f"""Return your answer as plain JSON, and following the following format, return only the JSON object:
@@ -1199,31 +1321,125 @@ def integrate_facts(text, list_of_facts, chosen_model=chosen_model, temperature=
     return res
 
 
-def show_diff(V1, V2):
+##from streamlit_extras/word_importances
+def get_color(importance: float):# -> str:
+    importance = max(-1, min(1, importance))
+    if importance > 0:
+        hue = 120
+        sat =75
+        lig = 100-int(50*importance)
+    else: 
+        hue = 0
+        sat = 75
+        lig = 100 - int(-40*importance)
+    return "hsl({}, {}%, {}%)".format(hue, sat, lig)
+
+
+##from streamlit_extras/word_importances
+def format_word_importances(words: List[str], importances: List[float]) -> str:
+    """Adds a background color to each word based on its importance (float from -1 to 1)
+
+    Args:
+        words (list): List of words
+        importances (list): List of importances (scores from -1 to 1)
+
+    Returns:
+        html (str): HTML string with formatted word
+
+
+    """
+    if importances is None or len(importances) == 0:
+        return "<td></td>"
+    assert len(words) == len(importances), "Words and importances but be of same length"
+
+    tags = ["<td>"]
+    for word, importance in zip(words, importances[: len(words)]):
+        color = get_color(importance)
+        unwrapped_tag = (
+            '<mark style="background-color: {color}; opacity:1.0;             '
+            '        line-height:1.75"><font color="black"> {word}            '
+            "        </font></mark>".format(color=color, word=word)
+        )
+        tags.append(unwrapped_tag)
+    tags.append("</td>")
+    html = "".join(tags)
+
+    return html
+
+
+tmp_coloured_text = """<td><mark style="background-color: hsl(120, 75%, 60%); opacity:1.0;                     line-height:1.75"><font color="black"> hi                    </font></mark><mark style="background-color: hsl(120, 75%, 95%); opacity:1.0;                     line-height:1.75"><font color="black"> there                    </font></mark><mark style="background-color: hsl(120, 75%, 85%); opacity:1.0;                     line-height:1.75"><font color="black"> this                    </font></mark><mark style="background-color: hsl(0, 75%, 72%); opacity:1.0;                     line-height:1.75"><font color="black"> is                    </font></mark><mark style="background-color: hsl(0, 75%, 60%); opacity:1.0;                     line-height:1.75"><font color="black"> a                    </font></mark><mark style="background-color: hsl(120, 75%, 75%); opacity:1.0;                     line-height:1.75"><font color="black"> test                    </font></mark></td>"""
+
+
+def split_text(text):
+    # Split text into words, preserving delimiters (spaces, newlines, punctuation)
+    # The pattern looks for sequences of whitespace (\s+), or single non-word characters (\W)
+    # The parentheses in the pattern keep the delimiters in the result.
+    words_and_delimiters = re.split(r'(\s+|\W)', text)
+    # Filter out empty strings that may appear
+    return [token for token in words_and_delimiters if token]
+
+
+def show_diff(V1, V2, mode="colour", deletes=True):
     # function from https://stackoverflow.com/questions/774316/python-difflib-highlighting-differences-inline
     """Unify operations between two compared strings
     seqm is a difflib.SequenceMatcher instance whose a & b are strings"""
+
+    ##try:
+    #V1 = split_text(V1)
+    #V2 = split_text(V2)
+
     seqm= difflib.SequenceMatcher(None, V1, V2)
 
     output= []
     for opcode, a0, a1, b0, b1 in seqm.get_opcodes():
         if opcode == 'equal':
-            output.append(seqm.a[a0:a1])
+            output.append(seqm.a[a0:a1].replace('\n', '<br>'))
         elif opcode == 'insert':
-            output.append("<ins>" + seqm.b[b0:b1] + "</ins>")
+            ##originally diff-lib style without colour-code:
+            #output.append("<ins>" + seqm.b[b0:b1] + "</ins>")
+            ## with colour-code and underlined: 
+            #output.append("<ins>" + format_word_importances([seqm.b[b0:b1]], [0.6]) + "</ins>")
+            
+            if mode == "colour":
+                ##without underline, but colour:
+                output.append(format_word_importances([seqm.b[b0:b1]], [0.3]))
+            else:
+                ##originally diff-lib style without colour-code:
+                output.append("<ins>" + seqm.b[b0:b1] + "</ins>")
         elif opcode == 'delete':
-            output.append("<del>" + seqm.a[a0:a1] + "</del>")
+            if deletes:
+                output.append("<del>" + seqm.a[a0:a1].replace('\n', '<br>') + "</del>")
         elif opcode == 'replace':
-            #raise NotImplementedError( "what to do with 'replace' opcode?" )
-            ##VG I put this: To test
-            output.append("<ins>" + seqm.b[b0:b1] + "</ins>")
-            output.append("<del>" + seqm.a[a0:a1] + "</del>")
+            ##originally difflib style without colour-code:
+            #output.append("<ins>" + seqm.b[b0:b1].replace('\n', '<br>') + "</ins>")
+            ##with colour-code and underlined:
+            #output.append("<ins>" + format_word_importances([seqm.b[b0:b1].replace('\n', '<br>')], [0.6]) + "</ins>")
+            if mode == "colour":
+                ##without underline, with colour:
+                output.append(format_word_importances([seqm.b[b0:b1].replace('\n', '<br>')], [0.3]))
+            else: 
+                ##originally difflib style without colour-code:
+                output.append("<ins>" + seqm.b[b0:b1].replace('\n', '<br>') + "</ins>")
+            if deletes:
+                output.append("<del>" + seqm.a[a0:a1].replace('\n', '<br>') + "</del>")
         else:
             raise RuntimeError( f"unexpected opcode unknown opcode {opcode}" )
     res1 = ''.join(output)
+    #res1 += tmp_coloured_text
+
     html = "<html><body>"+res1+"</body></html>"
     return html
 
 
+def remove_del_tags(html):
+    # This regular expression finds all instances of <del>...</del> and removes them
+    clean_html = re.sub(r'<del>.*?</del>', '', html, flags=re.DOTALL)
+    return clean_html
+
+
 if __name__ == "__main__":
-    pass
+    html = format_word_importances(['hi', 'there', 'this', 'is', 'a', 'test'], [0.8, 0.1, 0.3, -0.7, -1, 0.5])
+    print(html)
+    ##how to call it in streamlit:
+    #st.write(html, unsafe_allow_html=True)
+    #pass
