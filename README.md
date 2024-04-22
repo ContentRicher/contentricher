@@ -52,8 +52,11 @@ To run the analysis of the latest Instagram Posts of people mentioned in the tex
 ```INSTA_USERNAME = "[PUT YOUR INSTAGRAM USERNAME HERE]"```   
 You may put your password or, if you do not provide it, you will need to log in to your Instagram account on Firefox before using ContentRicher.
 Disclaimer: Make sure you read the current Instagram / Meta terms of use and only use this feature if it agrees with them.   
-To add Mixtral over Groq (faster inference), enter your Groq key, which you can obtain here: https://groq.com/   
+To add Mixtral over Groq (for faster inference), enter your Groq key, which you can obtain here: https://groq.com/   
 ```GROQ_KEY="[PUT YOUR GROQ KEY HERE]"```    
+Similarly, for the database, insert a database name and the name and password for the admin user.
+Keep host and port as is. 
+Insert an name and password for your testuser under POSTGRES_NORMALUSER and POSTGRES_NORMALUSERPASSWORD.
 Finally, run the app from the experiments folder with:  
 ```streamlit run frontend_experiments.py```
 
