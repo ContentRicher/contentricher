@@ -1,10 +1,24 @@
 version: '3.8'  # specify docker-compose version
 
 services:
+  db:
+    image: postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_NORMALUSER}
+      POSTGRES_PASSWORD: ${POSTGRES_NORMALUSERPASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   contentricher:  # name of your service
     build: .  # specifies build context directory
-    command: streamlit run ./app/experiments/frontend_experiments.py #runserver 0.0.0.0:8501  # command to start your application
+    depends_on:
+      - db
+    command: ["/usr/wait-for-it.sh", "db:5432", "--", "streamlit", "run", "./app/experiments/main.py"] #streamlit run ./app/experiments/main.py #./app/experiments/frontend_experiments.py #runserver 0.0.0.0:8501  #start application
     volumes:
       - .:/app  # mount volume
     ports:
       - "8501:8501"  # bind port
+
+volumes:
+  postgres_data:

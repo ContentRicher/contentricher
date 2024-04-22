@@ -7,7 +7,11 @@ from sqlite3 import OperationalError, connect
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+#load_dotenv()
+# Assuming the .env file is one level up from the current script
+#dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+dotenv_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
+load_dotenv(dotenv_path)
 
 username=os.getenv("INSTA_USERNAME")
 

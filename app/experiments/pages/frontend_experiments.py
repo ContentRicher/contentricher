@@ -1,5 +1,9 @@
 import streamlit as st
+
+import sys
+sys.path.append("..") # Adds higher directory to python modules path.
 import wiki_functions as wf
+import database_functions as dbf
 from wiki_functions import options, chosen_model
 import vision_functions as vf
 
@@ -17,7 +21,12 @@ import os
 import markdownify
 import extra_streamlit_components as stx
 
-load_dotenv()
+import pandas as pd
+
+#load_dotenv()
+# Assuming the .env file is one level up from the current script
+dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+load_dotenv(dotenv_path)
 
 API_KEY=os.getenv("API_KEY")
 MISTRAL_API_KEY=os.getenv("MISTRAL_API_KEY")
@@ -162,6 +171,7 @@ if 'diff_text2_tmp' not in st.session_state:
 
 if 'article_text' not in st.session_state: 
     st.session_state.article_text = default_text 
+
 
 
 def set_clicked():
@@ -374,6 +384,8 @@ def stop_editing5(calc_diff=True):
 
 
 def set_texts(text=st.session_state.user_input):
+    print('in set_texts with text:')
+    print(text)
 
     facts_to_integrate = []
     if not st.session_state.relevant_parts_to_show == None:
@@ -433,6 +445,7 @@ def clear():
     st.session_state.article_text = ''
     st.session_state.integrated_text = ''
     st.session_state.last_confirmed = ''
+    st.session_state.user_input = ''
 
 
 def repeat():
@@ -453,6 +466,7 @@ def repeat():
         st.session_state.diff_text2 = st.session_state.diff_text2_tmp
     else:
         st.session_state.diff_text2 = st.session_state.user_input
+
 
 
 tiles_left = []
@@ -483,11 +497,66 @@ wf.set_model(st.session_state.model)
 #if st.sidebar.button('Suche starten'):
 #    st.sidebar.write('Suche nach:', search_term)
 
+dbname = os.getenv("POSTGRES_DB")
+user = os.getenv("POSTGRES_ADMINUSER")
+password = os.getenv("POSTGRES_ADMINPASSWORD")
+host = os.getenv("POSTGRES_HOST") 
+port = os.getenv("POSTGRES_PORT")
+try: 
+    username = st.session_state.check_pw_page["username"]
+    user_password = st.session_state.check_pw_page["user_password"]#"password123"  # Plain-text password to be hashed
+except: 
+    pass
+
+
+
+
+#topic_list_tmp = ["Abc", "Def", "Ghi"]
+# SQL query to fetch data
+query = "SELECT * FROM topics WHERE user_id = "+username
+
+query = f"""SELECT t.topic_name
+    FROM topics t
+    JOIN users u ON t.user_id = u.id
+    WHERE u.username = '{username}';"""
+
+topic_list = [] ##initialize it here but overwrite it after db search
+
+print(query)
+
+# Fetching data
+data = dbf.fetch_data(host, dbname, user, password, port, query)
+    
+# Display data
+#print(data)
+if not data.empty:
+    df = pd.DataFrame(data, columns=['user_id', 'topic_name'])
+    #st.write(df)
+#else:
+    #st.write("No data found.")
+
+if not data.empty:
+    topic_list = df['topic_name'].tolist()[-5:]
+    #print(topic_list)
+    #st.sidebar.selectbox('Wahl des Topics', options = topic_list)
+topic_list_tmp = topic_list
+
+placeholder_radio1 = st.sidebar.empty()
+
+placeholder_radio1.radio(
+    "Your recent searches",
+    topic_list_tmp)#,
+    #captions = ["Caption1", "Caption2", "Caption3"])
+ #session_state.check_pw_page["username"]
+
 # Main area layout with two columns
 left_column, middle_column, right_column = st.columns([1, 6, 3])
 
 #wiki_images = dict()
 my_folder = "../img/"#'wiki_images'#wf.my_folderwf.my_folder
+
+#print('USERNAME:')
+#st.markdown(st.session_state.check_pw_page["username"])
 
 # Middle column for the article input and identified persons
 with middle_column:
@@ -496,19 +565,22 @@ with middle_column:
     if 1 == 1:
 
         if st.session_state.editing5:
-            article_text = st.text_area("Edit the text", value=st.session_state.last_confirmed, key='new_content5',height=400)
-            st.session_state.article_text = article_text
-
+            st.session_state.article_text = st.text_area("Edit the text", value=st.session_state.last_confirmed, key='new_content5',height=400)
+            #st.session_state.article_text = article_text
+            
             ##only if already did at least one integration or edit to the text: ##TBD if I type the text what happens
             if 'diff_text' in st.session_state and st.session_state.diff_text != '':
                 st.button("Save", on_click=stop_editing5)  # Clicking this will save the content and exit editing mode
+            text_contents = st.session_state.new_content5
         else:
             if 'diff_text' in st.session_state and not st.session_state.diff_text == '': ##TBD: maybe not show deletions, then take diff_text2 instead
                 st.markdown(st.session_state.diff_text.replace("\n", "<br>"), unsafe_allow_html=True)
             else: 
                 st.markdown(st.session_state.last_confirmed, unsafe_allow_html=True)
             st.button("Edit", on_click=start_editing5)  # Clicking this will switch to editing mode
+            text_contents = st.session_state.markdown_content5#st.session_state.new_content5
         st.button("Clear", on_click=clear) 
+        st.download_button('Download', text_contents) 
 
 
     if st.session_state.button_find_disabled == True: ##Button disabled
@@ -530,7 +602,11 @@ with middle_column:
             #st.success('Personen hervorgehoben.')
             st.session_state.find_person_clicked = True
             st.session_state.clicked = False ##reset, not showing elements that have nothing to do with new selection
-            st.session_state.user_input = st.session_state.new_content5#article_text ##TODO check if it always gets the current text
+            try:
+                st.session_state.user_input = st.session_state.new_content5#article_text ##TODO check if it always gets the current text
+            except:
+                st.session_state.user_input = st.session_state.markdown_content5
+
             print('chosen_model when calling get_all_wiki_urls:')
             print(chosen_model)
             st.session_state.parsed_ents = wf.get_all_wiki_urls(st.session_state.user_input, chosen_model=st.session_state.model)
@@ -543,6 +619,7 @@ with middle_column:
             st.session_state.wiki_lines_langs = dict()
             st.session_state.insta_lines = dict()
 
+            topics = []
             for i in range(len(people)):
                 #st.markdown('i')
                 ent = people[i]
@@ -551,12 +628,14 @@ with middle_column:
                 print(st.session_state.wiki_lines[i])
 
                 person_name = ent.name
+
                 ##for now, taking the first entry, TODO: possibly improve wikipedia disambiguation in backend function
                 try:
                     wiki_title = ent.urls[0].title
                     wiki_url = ent.urls[0].url
 
                     the_page = wiki_title
+                    topics.append(the_page)
 
                     the_page =  the_page.replace(' ', '_')
                     # get JSON data and extract image URL
@@ -585,6 +664,7 @@ with middle_column:
                         except:
                             print("No image file for " + the_page)
 
+
                     ##Getting insta profiles:
                     ##Done: Only do this ad-hoc when the insta-info is desired. It takes longer otherwise to show any results at the beginning
                     st.session_state.parsed_instas[i] = None       
@@ -602,6 +682,12 @@ with middle_column:
 
                 except: 
                     pass ##will take default image below in 'except' if an image is not found
+
+
+            ##Adding new topics to db
+            ##TODO: Add a timestamp, so also new searches for a previous search are added (and shown in recent searches)
+            dbf.insert_user_and_topics(dbname, user, password, host, port, username, user_password, topics)
+
 
 
     st.markdown("""___""")
@@ -778,7 +864,7 @@ with right_column:
         #placeholder_for_radio = st.empty()
         placeholder_for_reset = st.empty()
                 
-        submitted = st.form_submit_button("Integriere Fakten", on_click=set_texts, args=[st.session_state.article_text])#last_confirmed])#new_content5])#last_confirmed])
+        submitted = st.form_submit_button("Integriere Fakten", on_click=set_texts, args=[st.session_state.article_text])#new_content5])#article_text])#last_confirmed])#new_content5])#last_confirmed])
         
 
     with placeholder_for_reset: 

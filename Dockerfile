@@ -1,6 +1,13 @@
 # Use an official Python runtime as a parent image
 FROM python:3.9.11
 
+# Copy wait-for-it script
+COPY wait-for-it.sh /usr/wait-for-it.sh
+RUN chmod +x /usr/wait-for-it.sh
+
+# Install PostgreSQL client
+RUN apt-get update && apt-get install -y postgresql-client
+
 # Set the working directory in the container
 WORKDIR /app
 
@@ -18,5 +25,5 @@ EXPOSE 8501
 ENV NAME World
 
 # Run streamlit when the container launches
-CMD ["streamlit", "run", "./app/experiments/frontend_experiments.py"]
+CMD ["streamlit", "run", "./app/experiments/main.py"]
 

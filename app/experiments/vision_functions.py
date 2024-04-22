@@ -10,7 +10,11 @@ import requests
 from openai import OpenAI
 
 from dotenv import load_dotenv
-load_dotenv()
+#load_dotenv()
+# Assuming the .env file is one level up from the current script
+#dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+dotenv_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
+load_dotenv(dotenv_path)
 
 API_KEY=os.getenv("API_KEY")
 client = OpenAI(api_key = API_KEY)

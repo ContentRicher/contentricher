@@ -17,6 +17,6 @@ instaloader==4.10.3
 psycopg2-binary==2.9.9
 bcrypt==4.1.2
 groq==0.4.2
-langchain==groq-0.0.1
+langchain-groq
 markdownify==0.11.6
 extra_streamlit_components==0.1.71

@@ -58,7 +58,9 @@ query = 'http://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=j
 from load_insta import sessionfile, load_sessionfile, L2
 session_loaded = False
 
-load_dotenv()
+# Assuming the .env file is two levels up from the current script
+dotenv_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
+load_dotenv(dotenv_path)
 
 API_KEY=os.getenv("API_KEY")
 client = OpenAI(api_key = API_KEY)
@@ -181,10 +183,6 @@ class RelevantParts(BaseModel):
 class RelevantPartDe(BaseModel):
     rank: int = Field(description = "This is the rank of probability among all relevant parts suggestions.")
     fact: str = Field(description = "This is the relevant fact, an extracted fact or short paragraph from the entire text, in German.")
-
-# class RelevantPartDe2(BaseModel):
-#     rank: int = Field(description = "This is the rank of probability among all relevant parts suggestions.")
-#     fact: str = Field(description = "Dies ist ein relevanter Fakt oder sehr kurzer Paragraph, auf deutsch.")
     
 class RelevantPartsDe(BaseModel):
     relevantparts: List[RelevantPartDe]  
@@ -690,8 +688,6 @@ def get_relevant_parts(context, text, wiki_title, translate=True, source_insta_p
         JSON:
         """
 
-    ##later add to prompt:
-    #    and that is relevant for the target group {target_group}.
 
     res = ask_GPT(system_intel, prompt, chosen_model=chosen_model) ##TODO replace by langchain generic call (llm replaceable)
 

@@ -5,7 +5,11 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+#load_dotenv()
+# Assuming the .env file is one level up from the current script
+#dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+dotenv_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
+load_dotenv(dotenv_path)
 
 username=os.getenv("INSTA_USERNAME")
 pw=os.getenv("INSTA_PASSWORD") 
@@ -33,6 +37,5 @@ def load_sessionfile(sessionfile):
     return True
 
 if __name__ == "__main__":
-    print('hello')
     load_sessionfile(sessionfile)
     #pass
