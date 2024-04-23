@@ -16,16 +16,6 @@ def connect_to_db(dbname, user, password, host, port):
     )
     return conn
 
-
-# Function to fetch data
-# def fetch_data(query):
-#     conn = connect_to_db()
-#     cursor = conn.cursor()
-#     cursor.execute(query)
-#     records = cursor.fetchall()
-#     cursor.close()
-#     conn.close()
-#     return records
 import psycopg2
 import pandas as pd
 import bcrypt
@@ -410,22 +400,8 @@ if __name__ == "__main__":
     # # Connect to the database with these details
     # conn = connect_to_db(dbname, user, password, host, port)
 
-    # topics = ["Python", "Data Science", "Machine Learning"]
-    # username = "newuser"
-    # user_password = "cr7711"#"password123""password123"  # Plain-text password to be hashed
-    # insert_user_and_topics(dbname, user, password, host, port, username, user_password, topics)
-
     main(host, dbname, user, password, port)
 
     main2(host, dbname, user, password, port)
 
 
-    # Example usage
-    username = "newuser"
-    user_password = "cr7711"#"password123"
-    check = check_login(dbname, user, password, host, port, username, user_password)
-    print(check)
-
-
-    # Example call to change password
-    #change_password(dbname, user, password, host, port, username, 'cr7711')

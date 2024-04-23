@@ -7,7 +7,7 @@ import database_functions as dbf
 
 
 
-def setup_database(dbname, user, password, host='db', port, testuser, testuserpassword):
+def setup_database(dbname, user, password, host, port, testuser, testuserpassword):
     """Set up the database tables and initial data."""
     conn = psycopg2.connect(
         dbname=dbname,
@@ -42,7 +42,7 @@ def setup_database(dbname, user, password, host='db', port, testuser, testuserpa
 
     ##Current older version with two simple tables, to add date to have multiple entries for same topic:
     cursor.execute('''CREATE TABLE IF NOT EXISTS users
-                (id SERIAL PRIMARY KEY, testuser TEXT UNIQUE, testuserpassword TEXT)''')
+                (id SERIAL PRIMARY KEY, username TEXT UNIQUE, password TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS topics
                 (user_id INTEGER, topic_name TEXT,
                 FOREIGN KEY(user_id) REFERENCES users(id))''')
@@ -58,9 +58,8 @@ def setup_database(dbname, user, password, host='db', port, testuser, testuserpa
 
 def main():
     """Main entry point for the application."""
-    #load_dotenv()  # Load environment variables
-    # Assuming the .env file is one level up from the current script
-    #dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+
+    # Assuming the .env file is two levels up from the current script
     dotenv_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
     load_dotenv(dotenv_path)
 

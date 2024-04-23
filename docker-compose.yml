@@ -4,8 +4,8 @@ services:
   db:
     image: postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_NORMALUSER}
-      POSTGRES_PASSWORD: ${POSTGRES_NORMALUSERPASSWORD}
+      POSTGRES_USER: ${POSTGRES_ADMINUSER}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMINPASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
