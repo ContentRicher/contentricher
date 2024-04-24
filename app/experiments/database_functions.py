@@ -204,7 +204,6 @@ def check_login(dbname, user, password, host, port, username, user_password):
         # Fetch the hashed password from the database for the given username
         cur.execute("SELECT password FROM users WHERE username = %s;", (username,))
         stored_password = cur.fetchone()  # fetchone() returns a tuple or None
-        print('a')
 
         if stored_password:
             stored_password = stored_password[0]  # Extract the hashed password
@@ -220,19 +219,16 @@ def check_login(dbname, user, password, host, port, username, user_password):
 
             # Check if the provided password matches the stored hashed password
             if bcrypt.checkpw(user_password.encode('utf-8'), stored_password):#_bytes.encode('utf-8')):
-                print('c')
                 print("Login successful.")
                 return True
             else:
-                print('d')
                 print("Invalid username or password.")
                 return False
         else:
-            print('e')
+
             print("Username does not exist.")
             return False
     except Exception as e:
-        print('f')
         print(f"An error occurred: {e}")
         return False
     # finally:

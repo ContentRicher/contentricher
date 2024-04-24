@@ -78,8 +78,8 @@ def check_password():
     dotenv_path = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
     load_dotenv(dotenv_path)
     dbname = os.getenv("POSTGRES_DB")
-    user = os.getenv("POSTGRES_USER")
-    password = os.getenv("POSTGRES_PASSWORD")
+    user = os.getenv("POSTGRES_ADMINUSER")#"POSTGRES_USER")
+    password = os.getenv("POSTGRES_ADMINPASSWORD")#"POSTGRES_PASSWORD")
     host = os.getenv("POSTGRES_HOST", 'db') 
     port = os.getenv("POSTGRES_PORT")
 
@@ -145,8 +145,6 @@ def check_password():
 
         with col2:
             pass
-            #st.image(Image.open('./images/Logo_WeDaVinci-01--ultra_small_2.jpg'), width=200)
-            # st.image(Image.open('./images/wdv_logo.png'))
 
 
         # Password not correct, show input + error.

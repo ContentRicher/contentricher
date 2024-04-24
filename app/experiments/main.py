@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 
 import login
+from login import start
 import database_functions as dbf
 
 
@@ -76,12 +77,21 @@ def main():
     testuserpassword = os.getenv("POSTGRES_NORMALUSERPASSWORD")
     print(testuserpassword)
 
+    print("before setup")
+    print(dbname)
+    print(user)
+    print(password)
+    print(port)
+    print(testuser)
+    print(testuserpassword)
+
     # Set up the database
     setup_database(dbname, user, password, host, port, testuser, testuserpassword)
 
     # Import the app module and start the application
 
-    login.start()
+    #login.start()
+    start()
 
 if __name__ == "__main__":
 
