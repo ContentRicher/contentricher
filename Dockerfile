@@ -1,9 +1,9 @@
 # Use an official Python runtime as a parent image
 FROM python:3.9.11
 
-# Copy wait-for-it script
-COPY wait-for-it.sh /usr/wait-for-it.sh
-RUN chmod +x /usr/wait-for-it.sh
+## Copy wait-for-it script
+# COPY wait-for-it.sh /usr/wait-for-it.sh
+# RUN chmod +x /usr/wait-for-it.sh
 
 # Install PostgreSQL client
 RUN apt-get update && apt-get install -y postgresql-client

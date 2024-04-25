@@ -1,24 +1,27 @@
-version: '3.8'  # specify docker-compose version
-
 services:
   db:
     image: postgres
+    command: -c config_file=/etc/postgresql.conf
     environment:
       POSTGRES_USER: ${POSTGRES_ADMINUSER}
       POSTGRES_PASSWORD: ${POSTGRES_ADMINPASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    restart: always
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./customPostgresql.conf:/etc/postgresql.conf
+      - ./postgres_data:/var/lib/postgresql/data
 
-  contentricher:  # name of your service
+  contentricher: # name of your service
     build: .  # specifies build context directory
     depends_on:
       - db
-    command: ["/usr/wait-for-it.sh", "db:5432", "--", "streamlit", "run", "./app/experiments/main.py"] #streamlit run ./app/experiments/main.py #./app/experiments/frontend_experiments.py #runserver 0.0.0.0:8501  #start application
+    command: ["streamlit", "run", "./app/experiments/main.py", "--server.port=8501", "--server.address=0.0.0.0"] #streamlit run ./app/experiments/main.py #./app/experiments/frontend_experiments.py #runserver 0.0.0.0:8501  #start application
     volumes:
       - .:/app  # mount volume
     ports:
       - "8501:8501"  # bind port
 
-volumes:
-  postgres_data:
+#volumes:
+#  postgres_data:

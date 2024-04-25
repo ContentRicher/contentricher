@@ -77,14 +77,6 @@ def main():
     testuserpassword = os.getenv("POSTGRES_NORMALUSERPASSWORD")
     print(testuserpassword)
 
-    print("before setup")
-    print(dbname)
-    print(user)
-    print(password)
-    print(port)
-    print(testuser)
-    print(testuserpassword)
-
     # Set up the database
     setup_database(dbname, user, password, host, port, testuser, testuserpassword)
 
