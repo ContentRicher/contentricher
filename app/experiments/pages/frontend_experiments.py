@@ -271,7 +271,7 @@ def get_insta_line(instaent):
             ##TODO: think of when not to verify, e.g. if no Insta Sessio provided, but avert user it's not sure
             if st.session_state.check_insta == True:
                 try: 
-                    insta_valid, insta_verified = wf.check_insta_valid_and_verified(insta_url)
+                    insta_valid, insta_verified = wf.check_insta_valid_and_verified(insta_url, entered_insta_username, entered_insta_password)
                 except: 
                     ##Put default values if check_insta is into desired:
                     insta_valid = True
@@ -479,6 +479,22 @@ st.set_page_config(page_title='MTLab WIP', layout="wide")#, initial_sidebar_stat
 st.sidebar.title('Navigation')
 st.sidebar.write('Informationen zu Personen')
 
+entered_insta_username = st.sidebar.text_input(
+    "Insta Username (email)", type="default", help="Set this to run Insta analyses."
+)
+entered_insta_password = st.sidebar.text_input(
+    "Insta Password", type="password", help="Set your Instsa PW to run Insta analyses."
+)
+print("entered insta username:")
+print(entered_insta_username)
+ 
+if entered_insta_username:
+    #openai_api_key = entered_insta_username
+    enable_custom = True
+else:
+    entered_insta_username = "not_supplied"
+    enable_custom = False
+
 ##TODO: Handle missing keys
 if len(wf.options) == 0:
     st.session_state.button_find_disabled = True
@@ -504,8 +520,10 @@ host = os.getenv("POSTGRES_HOST")
 port = os.getenv("POSTGRES_PORT")
 try: 
     username = st.session_state.check_pw_page["username"]
-    user_password = st.session_state.check_pw_page["user_password"]#"password123"  # Plain-text password to be hashed
+    user_password = st.session_state.check_pw_page["user_password"]  # Plain-text password to be hashed
 except: 
+    username = ''
+    user_password = ''
     pass
 
 
@@ -795,7 +813,7 @@ for t in tiles_right:
         verified = False
         try:
             insta_ent = instas[i]
-            insta_line, insta_url, insta_username = get_insta_line(insta_ent)
+            insta_line, insta_url, dest_username = get_insta_line(insta_ent)
             if ":white_check_mark:" in insta_line: ##verified
                 verified = True
         except: 
@@ -807,12 +825,12 @@ for t in tiles_right:
                     st.session_state.relevant_parts_to_show = None
                     st.session_state.relevant_parts_to_show_insta = None
                     #insta_ent = instas[i]
-                    #insta_line, insta_url, insta_username = get_insta_line(insta_ent)
-                    ##downloading posts to a folder named like the insta username
-                    post_links, post_filepaths = wf.download_posts(insta_username, limit=3)#5)
+                    #insta_line, insta_url, dest_username = get_insta_line(insta_ent)
+                    ##downloading posts to a folder named like the dest username
+                    post_links, post_filepaths = wf.download_posts(dest_username, entered_insta_username, entered_insta_password, limit=3)#5)
                     #print(post_links)
                     #print(post_filepaths)
-                    set_relevant_parts_to_show_insta(context, insta_username, person_name, post_links, post_filepaths, language='de', translate=True)
+                    set_relevant_parts_to_show_insta(context, dest_username, person_name, post_links, post_filepaths, language='de', translate=True)
                 except:
                     print("downloading of instaposts did not work")
     i += 1

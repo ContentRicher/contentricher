@@ -55,7 +55,7 @@ base_url = 'https://en.wikipedia.org/wiki/'
 # (partial URL will be added to the end)
 query = 'http://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&titles='
 
-from load_insta import sessionfile, load_sessionfile, L2
+from load_insta import load_sessionfile, create_sessionfile_dir, L2
 session_loaded = False
 
 # Assuming the .env file is two levels up from the current script
@@ -1046,27 +1046,32 @@ def extract_insta_username(insta_url):
     return dest_username
 
 
-def get_sessionfile_from_firefox():
-    #load_sessionfile(sessionfile)
-    ##Alternative to the above, getting session after a firefox insta login
-    session_directory = "../instaloader"
-    filename = "{}session-{}".format(session_directory, username)
-    import_session_from_firefox(cookiefile=None, sessionfile=filename, username=username)#f"{session_directory}/{filename}", username=username)
+def get_sessionfile_from_firefox(username=username, password=None):
+    type = 1## tmp, on docker I load it via Username + Password provided instead of firefox
+    if type == 1: 
+        sessionfile = create_sessionfile_dir(username)
+        load_sessionfile(sessionfile, username, password)
+    else: 
+        ##Alternative to the above, getting session after a firefox insta login
+        session_directory = "../instaloader"
+        filename = "{}session-{}".format(session_directory, username)
+        import_session_from_firefox(cookiefile=None, sessionfile=filename, username=username)#f"{session_directory}/{filename}", username=username)
     #import_session_from_firefox(None, username)
     #print(cookiefile)
     print(username)
 
 
 ##TODO: Also try getting the sessionfile after firefox login, more flexible with regards to different users and no need to put password into .env
-def get_sessionfile():
+def get_sessionfile(username=username, password=None):
+    sessionfile = create_sessionfile_dir(username)
     print(sessionfile)
     if not exists(sessionfile):
-        get_sessionfile_from_firefox()
+        get_sessionfile_from_firefox(username, password)
     else:
         print('sessionfile exists')
 
         ##NOTE TODO: I probably need to delete the sessionfile if it is > 24 hours old and create a new one
-        last_modified = check_sessionfile_date()
+        last_modified = check_sessionfile_date(username)
         time_delta = datetime.now() - last_modified
         print('age of sessionfile:')
         print(time_delta)
@@ -1077,17 +1082,21 @@ def get_sessionfile():
         # Check if greater than 24 hours
         if total_hours > 24:
             print('Sessionfile is more than 24h old, replacing it')
-            get_sessionfile_from_firefox()
+            get_sessionfile_from_firefox(username, password)
 
 
-def check_insta_valid_and_verified(url):
+def check_insta_valid_and_verified(url, insta_username=None, insta_pw=None):
     ##returning values for 'valid' and 'verified' insta profile
     print('in check_insta')
+    sessionfile = create_sessionfile_dir(insta_username)
     print(sessionfile)
-    print(session_loaded)
+    try:
+        print(session_loaded)
+    except: 
+        pass
 
-    get_sessionfile()
-    load_sessionfile(sessionfile)
+    get_sessionfile(username=insta_username, password=insta_pw)
+    load_sessionfile(sessionfile, insta_username, insta_pw)
 
     print(url)
 
@@ -1100,7 +1109,7 @@ def check_insta_valid_and_verified(url):
         #get_insta_profile_infos(L, profile)
         try:
             print('getting insta_verified status:')
-            if get_insta_verified_status(dest_username) == True:#profile) == True:
+            if get_insta_verified_status(dest_username, insta_username, insta_pw) == True:#profile) == True:
                 return True, True
             else:
                 return True, False
@@ -1123,9 +1132,10 @@ def check_insta_valid_and_verified(url):
         profile = None
         return False, False
     
-def get_insta_verified_status(dest_username):#profile):
-
-    get_sessionfile()
+##not used (TODO: Update it by passing over insta_username, also L2 needs to be up to date)
+def get_insta_verified_status(dest_username, insta_username=None, insta_pw=None):#profile):
+    sessionfile = create_sessionfile_dir(insta_username)
+    #get_sessionfile(insta_username, insta_pw)
     load_sessionfile(sessionfile)
     try: 
         profile = instaloader.Profile.from_username(L2.context, dest_username)
@@ -1204,12 +1214,14 @@ def check_insta_valid2(url):
     
 
 ##TODO: also delete older posts, e.g. > 120 days old
-def download_posts(profilename, limit=5):
+def download_posts(profilename, insta_username, insta_pw, limit=5):
     post_links = []
     post_filepaths = []
 
-    get_sessionfile()
-    load_sessionfile(sessionfile)
+
+    #get_sessionfile(username=insta_username, password=insta_pw)
+    sessionfile = create_sessionfile_dir(username)
+    load_sessionfile(sessionfile, insta_username, insta_pw)
 
     posts = instaloader.Profile.from_username(L2.context, profilename).get_posts()
 
@@ -1239,7 +1251,7 @@ def download_posts(profilename, limit=5):
     return post_links, post_filepaths
 
 
-def check_sessionfile_date():
+def check_sessionfile_date(username=username):
     # Specify the file path
     session_directory = "../instaloader/" ##TODO: specify it 1x only
     file_path = "{}session-{}".format(session_directory, username)

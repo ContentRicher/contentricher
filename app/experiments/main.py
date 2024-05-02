@@ -8,7 +8,7 @@ import database_functions as dbf
 
 
 
-def setup_database(dbname, user, password, host, port, testuser, testuserpassword):
+def setup_database(dbname, user, password, host, port, testuser1, testuser1password, testuser2, testuser2password):
     """Set up the database tables and initial data."""
     conn = psycopg2.connect(
         dbname=dbname,
@@ -49,8 +49,8 @@ def setup_database(dbname, user, password, host, port, testuser, testuserpasswor
                 FOREIGN KEY(user_id) REFERENCES users(id))''')
 
     topics = []
-    dbf.insert_user_and_topics(dbname, user, password, host, port, testuser, testuserpassword, topics)
-
+    dbf.insert_user_and_topics(dbname, user, password, host, port, testuser1, testuser1password, topics)
+    dbf.insert_user_and_topics(dbname, user, password, host, port, testuser2, testuser2password, topics)
 
     # Commit changes and close connection
     conn.commit()
@@ -72,13 +72,19 @@ def main():
 
     host = os.getenv("POSTGRES_HOST", 'db') 
     port = os.getenv("POSTGRES_PORT")
-    testuser = os.getenv("POSTGRES_NORMALUSER")
-    print(testuser)
-    testuserpassword = os.getenv("POSTGRES_NORMALUSERPASSWORD")
-    print(testuserpassword)
+    testuser1 = os.getenv("POSTGRES_NORMALUSER1")
+    print(testuser1)
+    testuser1password = os.getenv("POSTGRES_NORMALUSERPASSWORD1")
+    print(testuser1password)
+
+    testuser2 = os.getenv("POSTGRES_NORMALUSER2")
+    print(testuser2)
+    testuser2password = os.getenv("POSTGRES_NORMALUSERPASSWORD2")
+    print(testuser2password)
+
 
     # Set up the database
-    setup_database(dbname, user, password, host, port, testuser, testuserpassword)
+    setup_database(dbname, user, password, host, port, testuser1, testuser1password, testuser2, testuser2password)
 
     # Import the app module and start the application
 
