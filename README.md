@@ -52,21 +52,20 @@ Change into the experiments folder
 Then, open the .env file in the experiments folder. You may need to press ```CMD + SHIFT + .``` to show the file.  Insert your key/s in the placeholders   
 ```API_KEY = "[PUT YOUR OPENAI API KEY HERE]"``` (for using GPT-3.5 from OpenAI) and/or put   
 ```MISTRAL_API_KEY = "[PUT YOUR MISTRAL_API KEY HERE]"``` (for using the Mistral Small Model).   
-To run the analysis of the latest Instagram Posts of people mentioned in the text, you need to add your Instagram username.   
-```INSTA_USERNAME = "[PUT YOUR INSTAGRAM USERNAME HERE]"```   
-You may put your password or, if you do not provide it, you will need to log in to your Instagram account on Firefox before using ContentRicher.
-Disclaimer: Make sure you read the current Instagram / Meta terms of use and only use this feature if it agrees with them.   
 To add Mixtral over Groq (for faster inference), enter your Groq key, which you can obtain here: https://groq.com/   
 ```GROQ_KEY="[PUT YOUR GROQ KEY HERE]"```    
 Similarly, for the database, insert a database name and the name and password for the admin user.
 Keep host and port as is. 
 Insert an name and password for your testuser under POSTGRES_NORMALUSER and POSTGRES_NORMALUSERPASSWORD.
 Finally, run the app from the experiments folder with:  
-```streamlit run frontend_experiments.py```
+```streamlit run frontend_experiments.py```   
+To run the analysis of the latest Instagram Posts of people mentioned in the text, you need to add your Instagram username. We provide two fields for that at runtime. 
+You may need to log in to your Instagram account on Firefox before using ContentRicher.
+Disclaimer: Make sure you read the current Instagram / Meta terms of use and only use this feature if it agrees with them.  
 
 ## Current state of development
 
-Currently, we retrieve information from Wikipedia and we include information from the latest Instagram posts of the identified persons (both from text and images).
+Currently, ContentRicher is a working prototype. We retrieve information from Wikipedia and we include information from the latest Instagram posts of the identified persons (both from text and images). This may be extended by retrieving information for different text elements (besides persons) and from different data sources.
   
 ## 📘 License
 
