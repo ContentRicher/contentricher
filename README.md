@@ -16,7 +16,11 @@ It is a web- and AI-based system that detects relevant parts in given texts that
 **- Userfriendly Interface:** Based on Streamlit, it offers a browser-based interface, with intuitive controls and display of the results.
 
 Click on the image to get to the video on Youtube.
-[![video](https://img.youtube.com/vi/CmhNdeESqKs/maxresdefault.jpg)](https://youtu.be/CmhNdeESqKs)
+[![video](https://img.youtube.com/vi/CmhNdeESqKs/maxresdefault.jpg)](https://youtu.be/lhYXvD1L8vs)
+Direct link to Video: 
+[video1](https://youtu.be/lhYXvD1L8vs)   
+Click here to see another video based on enrichting content with Instagram data:
+[video2](https://youtu.be/DCUicjGdqig)
 
 ## Running it
 
